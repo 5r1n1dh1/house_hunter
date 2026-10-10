@@ -13,8 +13,8 @@ import org.junit.Test
 class DistanceAndFilterTest {
 
     private val whitefield = WorkLocation("Work 1", 12.9698, 77.7500)
-    private const val INDIRANAGAR_LAT = 12.9719
-    private const val INDIRANAGAR_LON = 77.6412
+    private val INDIRANAGAR_LAT = 12.9719
+    private val INDIRANAGAR_LON = 77.6412
 
     private fun listing(id: String, rent: Double, bhk: Int? = 2, lat: Double? = null, lng: Double? = null) =
         Listing(
