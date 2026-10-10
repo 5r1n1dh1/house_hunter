@@ -16,8 +16,13 @@ object Normalizer {
         Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*k\\b").find(clean)?.let { match ->
             return match.groupValues[1].toDoubleOrNull()?.times(1_000.0)
         }
-        val digits = clean.filter { it.isDigit() || it == '.' }.toString()
-        return digits.toDoubleOrNull()?.takeIf { it > 0 }
+        // Take the first well-formed number: "25,000" -> 25000, ignoring stray dots/symbols.
+        val number = Regex("([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+            .find(text)
+            ?.groupValues
+            ?.get(1)
+            ?.replace(",", "")
+        return number?.toDoubleOrNull()?.takeIf { it > 0 }
     }
 
     /** "2 BHK" | "3bhk" | "2.5 BHK" -> 2 */
