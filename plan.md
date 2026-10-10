@@ -554,7 +554,37 @@ then `base64 -w0 househunter.jks`).
   emulator (Firebase Test Lab or `reactivecircus/android-emulator-runner`
   free-tier) — never run locally per the build policy.
 
-### Open risks
+## Implementation Status
+
+All 11 milestones are implemented; CI run **#38067185303** is green and produces a
+signed release APK (`v2` + `v3` signature schemes, ~2.1 MB).
+
+Delivered as planned: Overpass cascading dropdowns, Google Maps work-location
+pickers with a Work 1 / Work 2 distance banner on the details screen, config-driven
+`SiteScraper` + Sites screen + add-site form with real test-fetch, card list with
+price + 4 icon actions (call / map / photos / open in browser), detail screen with
+two-phase detail fetch, sort + filters, zero caching, and the free-tier CI pipeline.
+
+### Deviations from the plan (and why)
+
+| Plan | Implementation | Reason |
+|------|----------------|--------|
+| Google Places Autocomplete for work search | **Nominatim** search + map marker | Places needs a billing-enabled key; Nominatim is free. Keeps the app usable with no Google key at all. |
+| `gradle-wrapper.jar` committed | CI **bootstraps Gradle 8.10.2** and generates the wrapper per run | Binary wrapper JAR is not committed; keeps the repo text-only. `actions/setup-android@v3` also fails on current runners, so the preinstalled SDK is used. |
+| Built-in site configs enabled | All ship **disabled** (`requiresManual: true`) | Verified from this environment: NoBroker → 403, housing.com → 406, 99acres → 403, MagicBricks/OLX → 404. Users enable a source and fix selectors via the Add-site form. |
+| Instrumented tests in CI | Unit tests + lint only | Keeps every run inside the free-tier minute budget. |
+
+### Operations
+
+- Signing keystore: `~/.househunter/househunter.jks` (alias `househunter`) — **back this
+  up**; the app cannot be upgraded on a device without the same key.
+- To enable the map: add the `MAPS_API_KEY` repo secret (`gh secret set MAPS_API_KEY`).
+  Without it the app shows an explanatory panel instead of a blank map.
+- Artifact: `gh run download <run-id> --name app-release`.
+
+---
+
+## Open risks
 
 1. Site HTML/anti-bot changes break scrapers → config-driven selectors + per-site health
    flag + easy JSON edits.
