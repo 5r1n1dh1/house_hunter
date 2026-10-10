@@ -3,7 +3,6 @@ package com.househunter.app.data.repository
 import com.househunter.app.data.remote.NominatimApi
 import com.househunter.app.data.remote.OverpassApi
 import com.househunter.app.di.IoDispatcher
-import com.househunter.app.di.OverpassMirror
 import com.househunter.app.domain.model.OsmPlace
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -30,8 +29,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class LocationRepository @Inject constructor(
-    private val overpass: OverpassApi,
-    @OverpassMirror private val overpassMirror: OverpassApi,
+    private val overpassApis: Set<@JvmSuppressWildcards OverpassApi>,
     private val adminSnapshot: AdminSnapshot,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) {
@@ -107,22 +105,25 @@ class LocationRepository @Inject constructor(
             .sortedBy { it.name }
     }
 
-    /** Runs [query] against the primary endpoint, then the mirror (Overpass often 504s). */
+    /**
+ * Runs [query] against every Overpass mirror in turn.
+ *
+ * Public Overpass servers fail transiently very often (504 gateway timeouts), so
+ * each endpoint gets several attempts with a short backoff before moving on.
+ */
     private suspend fun query(
         query: String,
         defaultLevel: Int,
     ): List<OsmPlace> {
-        val endpoints = listOf(overpass, overpassMirror)
-        endpoints.forEachIndexed { index, api ->
-            if (index > 0) delay(500)
-            // Two attempts per endpoint: these servers fail transiently very often.
-            repeat(2) { attempt ->
+        overpassApis.forEachIndexed { index, api ->
+            if (index > 0) delay(400)
+            repeat(3) { attempt ->
                 val parsed = runCatching { api.run(query).string() }
                     .mapCatching { parseElements(JSONObject(it), defaultLevel) }
                     .getOrNull()
                     .orEmpty()
                 if (parsed.isNotEmpty()) return parsed
-                if (attempt == 0) delay(1_200)
+                if (attempt < 2) delay(1_200L * (attempt + 1))
             }
         }
         return emptyList()

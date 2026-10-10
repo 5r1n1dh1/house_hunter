@@ -42,22 +42,33 @@ object NetworkModule {
         .addInterceptor(headersInterceptor)
         .build()
 
+    /** Overpass queries are slow by nature (heavy spatial containment), so give them room. */
     @Provides
     @Singleton
-    fun provideOverpassApi(client: OkHttpClient): OverpassApi = Retrofit.Builder()
-        .baseUrl("https://overpass-api.de/api/")
-        .client(client)
+    fun provideOverpassClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .callTimeout(150, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .addInterceptor(headersInterceptor)
         .build()
-        .create(OverpassApi::class.java)
 
+    /**
+     * All public Overpass mirrors, tried in order by [com.househunter.app.data.repository.LocationRepository].
+     * The public instances 504 frequently under load, so rotation is required.
+     */
     @Provides
     @Singleton
-    @OverpassMirror
-    fun provideOverpassMirrorApi(client: OkHttpClient): OverpassApi = Retrofit.Builder()
-        .baseUrl("https://maps.mail.ru/osm/tools/overpass/api/")
-        .client(client)
-        .build()
-        .create(OverpassApi::class.java)
+    fun provideOverpassApis(client: OkHttpClient): Set<@JvmSuppressWildcards OverpassApi> {
+        val endpoints = listOf(
+            "https://overpass-api.de/api/",
+            "https://maps.mail.ru/osm/tools/overpass/api/",
+            "https://overpass.kumi.systems/api/",
+        )
+        return endpoints.map { base ->
+            Retrofit.Builder().baseUrl(base).client(client).build().create(OverpassApi::class.java)
+        }.toSet()
+    }
 
     @Provides
     @Singleton
