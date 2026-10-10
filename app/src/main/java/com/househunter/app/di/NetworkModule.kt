@@ -45,6 +45,7 @@ object NetworkModule {
     /** Overpass queries are slow by nature (heavy spatial containment), so give them room. */
     @Provides
     @Singleton
+    @OverpassHttpClient
     fun provideOverpassClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(25, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
@@ -59,7 +60,7 @@ object NetworkModule {
      */
     @Provides
     @Singleton
-    fun provideOverpassApis(client: OkHttpClient): Set<@JvmSuppressWildcards OverpassApi> {
+    fun provideOverpassApis(@OverpassHttpClient client: OkHttpClient): Set<@JvmSuppressWildcards OverpassApi> {
         val endpoints = listOf(
             "https://overpass-api.de/api/",
             "https://maps.mail.ru/osm/tools/overpass/api/",

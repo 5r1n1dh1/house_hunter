@@ -9,3 +9,8 @@ import javax.inject.Qualifier
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class IoDispatcher
+
+/** OkHttp client tuned for slow Overpass queries (separate timeouts). */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class OverpassHttpClient
