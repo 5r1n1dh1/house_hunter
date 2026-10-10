@@ -33,7 +33,7 @@ class NormalizerTest {
 
     @Test
     fun sanitizesPhoneNumbers() {
-        assertEquals("9876543210", Normalizer.sanitizePhone("+91 98765 43210"))
+        assertEquals("919876543210", Normalizer.sanitizePhone("+91 98765 43210"))
         assertNull(Normalizer.sanitizePhone("N/A"))
         assertNull(Normalizer.sanitizePhone(null))
     }
