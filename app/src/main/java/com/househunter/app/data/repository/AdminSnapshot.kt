@@ -3,7 +3,7 @@ package com.househunter.app.data.repository
 import android.content.Context
 import com.househunter.app.domain.model.OsmPlace
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import javax.inject.Inject
@@ -18,7 +18,6 @@ import javax.inject.Singleton
 @Singleton
 class AdminSnapshot @Inject constructor(
     @ApplicationContext private val context: Context,
-    @IoDispatcher private val io: CoroutineDispatcher,
 ) {
 
     @Volatile
@@ -26,9 +25,7 @@ class AdminSnapshot @Inject constructor(
 
     suspend fun states(): List<OsmPlace> {
         cached?.let { return it }
-        return withContext(io) {
-            cached ?: load().also { cached = it }
-        }
+        return withContext(Dispatchers.IO) { load() }.also { cached = it }
     }
 
     /** Snapshot holds no district hierarchy - districts always come from Overpass. */
