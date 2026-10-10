@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP is disabled by default (Android 9+). Only the domains used by the
+  built-in site configs are allowed to fall back to http://, so user-added sites
+  that are HTTPS-only stay protected.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">nobroker.in</domain>
+        <domain includeSubdomains="true">nobrokerage.com</domain>
+        <domain includeSubdomains="true">nestriqo.com</domain>
+        <domain includeSubdomains="true">razorent.com</domain>
+        <domain includeSubdomains="true">rentmystay.com</domain>
+        <domain includeSubdomains="true">magicbricks.com</domain>
+        <domain includeSubdomains="true">99acres.com</domain>
+        <domain includeSubdomains="true">housing.com</domain>
+        <domain includeSubdomains="true">bengaluru.rent</domain>
+        <domain includeSubdomains="true">olx.in</domain>
+    </domain-config>
+</network-security-config>

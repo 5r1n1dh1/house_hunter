@@ -1,0 +1,109 @@
+name: Build Production APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Unit tests, lint & release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    env:
+      GRADLE_VERSION: "8.10.2"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install build tools & platforms
+        run: |
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Bootstrap Gradle (wrapper JAR is not committed)
+        run: |
+          curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" -o gradle.zip
+          unzip -q gradle.zip -d "$HOME"
+          echo "$HOME/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Gradle (dependency cache)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle.kts', 'gradle/libs.versions.toml') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Generate Gradle wrapper
+        run: gradle wrapper --gradle-version "$GRADLE_VERSION" --distribution-type bin --no-daemon
+
+      - name: Unit tests & lint
+        run: ./gradlew testDebugUnitTest lintDebug --no-daemon --stacktrace
+
+      - name: Assemble release APK (unsigned)
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+
+      - name: Align & sign APK
+        run: |
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          DIR=app/build/outputs/apk/release
+          UNSIGNED="$DIR/app-release-unsigned.apk"
+          OUT="$DIR/app-release.apk"
+          if [ -n "$SIGNING_KEYSTORE_BASE64" ]; then
+            echo "$SIGNING_KEYSTORE_BASE64" | base64 -d > keystore.jks
+            "$BT"/zipalign -f -v 4 "$UNSIGNED" app-aligned.apk
+            "$BT"/apksigner sign --ks keystore.jks \
+              --ks-pass "pass:$SIGNING_KEYSTORE_PASSWORD" \
+              --key-pass "pass:$SIGNING_KEY_PASSWORD" \
+              --ks-key-alias "$SIGNING_KEY_ALIAS" --out "$OUT" app-aligned.apk
+            "$BT"/apksigner verify --verbose "$OUT"
+          else
+            "$BT"/zipalign -f -v 4 "$UNSIGNED" "$OUT"
+            echo "::warning::No signing secrets configured - artifact is unsigned"
+          fi
+          ls -lh "$OUT"
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_KEYSTORE_PASSWORD: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach APK to GitHub Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk

@@ -1,0 +1,224 @@
+[
+  {
+    "id": "nobroker",
+    "name": "NoBroker",
+    "baseUrl": "https://www.nobroker.in",
+    "searchUrlTemplate": "https://www.nobroker.in/property-search/{DISTRICT_SLUG}/{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div[class*='card'], div.tab-cont",
+      "title": "h2, h3",
+      "price": "div[class*='rent'] , span[class*='price']",
+      "location": "div[class*='locality']",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='property']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Anti-bot protection: if this returns 0 results, open the site in a browser, copy the search URL and set your own selectors."
+  },
+  {
+    "id": "nobrokerage",
+    "name": "NoBrokerage.com",
+    "baseUrl": "https://www.nobrokerage.com",
+    "searchUrlTemplate": "https://www.nobrokerage.com/property-search/rent-in-{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div[class*='property-card'], article",
+      "title": "h2, h3",
+      "price": "span[class*='rent'], div[class*='price']",
+      "location": "span[class*='location']",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='property']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Verify selectors with Test fetch; adjust them if the card layout changed."
+  },
+  {
+    "id": "nestriqo",
+    "name": "NestRiqo",
+    "baseUrl": "https://www.nestriqo.com",
+    "searchUrlTemplate": "https://www.nestriqo.com/property-search/{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div.property-card",
+      "title": "h2.property-title",
+      "price": "span.property-price",
+      "location": "span.property-location",
+      "imageUrl": "img.property-image",
+      "detailUrl": "a.property-link"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Confirm the search URL pattern with Test fetch."
+  },
+  {
+    "id": "razorent",
+    "name": "Razorent",
+    "baseUrl": "https://www.razorent.com",
+    "searchUrlTemplate": "https://www.razorent.com/property/search?location={LOCALITY}",
+    "selectors": {
+      "listContainer": "div.property-listing",
+      "title": "h3",
+      "price": "div.price",
+      "location": "div.location",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='property']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Confirm selectors with Test fetch."
+  },
+  {
+    "id": "rentmystay",
+    "name": "RentMyStay",
+    "baseUrl": "https://www.rentmystay.com",
+    "searchUrlTemplate": "https://www.rentmystay.com/property/search/{LOCALITY}",
+    "selectors": {
+      "listContainer": "div.property-item",
+      "title": "h2",
+      "price": "span.amount",
+      "location": "span.area",
+      "imageUrl": "img",
+      "detailUrl": "a"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Confirm selectors with Test fetch."
+  },
+  {
+    "id": "magicbricks",
+    "name": "MagicBricks",
+    "baseUrl": "https://www.magicbricks.com",
+    "searchUrlTemplate": "https://www.magicbricks.com/property-for-rent/residential-real-estate/?bedroom={LOCALITY}",
+    "selectors": {
+      "listContainer": "div.mb-srp__card, div.SRCard",
+      "title": "h2.mb-srp__card--title, h2",
+      "price": "div.mb-srp__card__price--amount, span",
+      "location": "div.mb-srp__card__address, div.SRCard__address",
+      "imageUrl": "img",
+      "detailUrl": "a.mb-srp__card__link, a[href*='property']"
+    },
+    "pagination": { "maxPages": 2 },
+    "rateLimitSeconds": 10,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Heavy anti-bot. Prefer the official partner API when available."
+  },
+  {
+    "id": "99acres",
+    "name": "99acres",
+    "baseUrl": "https://www.99acres.com",
+    "searchUrlTemplate": "https://www.99acres.com/property-search/rent/{LOCALITY}",
+    "selectors": {
+      "listContainer": "div.af-card, div.pg-cardwrap",
+      "title": "h2.af-card-title",
+      "price": "div.af-card-rent, div.price",
+      "location": "div.af-card-sector",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='property']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 10,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Heavy anti-bot. Verify selectors; respect rate limits."
+  },
+  {
+    "id": "housing",
+    "name": "housing.com",
+    "baseUrl": "https://housing.com",
+    "searchUrlTemplate": "https://housing.com/in/rent/search/{CITY}-{LOCALITY}",
+    "selectors": {
+      "listContainer": "div.search-list-item, div.card",
+      "title": "h2, h3",
+      "price": "span.rent-price, div.price",
+      "location": "div.locality-name, span",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='/rent/']"
+    },
+    "pagination": { "maxPages": 2 },
+    "rateLimitSeconds": 12,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Likely JS-rendered; treat as manual until verified."
+  },
+  {
+    "id": "nestaway",
+    "name": "NestAway (archived)",
+    "baseUrl": "https://www.nestaway.com",
+    "searchUrlTemplate": "https://www.nestaway.com/search/{LOCALITY}",
+    "selectors": {
+      "listContainer": "div.property-card",
+      "title": "h2",
+      "price": "span.price",
+      "detailUrl": "a"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Service folded into Urban Company; URL may redirect or be dead."
+  },
+  {
+    "id": "bengalururent",
+    "name": "bengaluru.rent",
+    "baseUrl": "https://bengaluru.rent",
+    "searchUrlTemplate": "https://bengaluru.rent/search?query={LOCALITY}",
+    "selectors": {
+      "listContainer": "div.property-card, article",
+      "title": "h2, h3",
+      "price": "span.price, div.price",
+      "location": "span.location",
+      "imageUrl": "img",
+      "detailUrl": "a"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 8,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Bengaluru only."
+  },
+  {
+    "id": "olx",
+    "name": "OLX India",
+    "baseUrl": "https://www.olx.in",
+    "searchUrlTemplate": "https://www.olx.in/{CITY}/rent/{LOCALITY}",
+    "selectors": {
+      "listContainer": "div._2nXW, div[data-cy='search-card']",
+      "title": "span[data-cy='title'], h2",
+      "price": "span[data-cy='search-card-price']",
+      "detailUrl": "a[data-cy='ad-title']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 12,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "JS-rendered + anti-bot; manual selectors required."
+  },
+  {
+    "id": "facebook",
+    "name": "Facebook Groups (manual)",
+    "baseUrl": "https://www.facebook.com",
+    "searchUrlTemplate": "https://www.facebook.com/groups/{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div[data-pagelet*='FeedUnit']",
+      "title": "h3",
+      "price": "span",
+      "detailUrl": "a[href*='/posts/']"
+    },
+    "pagination": { "maxPages": 1 },
+    "rateLimitSeconds": 15,
+    "enabled": false,
+    "requiresManual": true,
+    "note": "Requires login: not scrapable. Copy listings manually into the app instead."
+  }
+]

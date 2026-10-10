@@ -1,0 +1,11 @@
+# Copy to local.properties and fill in your keys. local.properties is git-ignored.
+
+# Google Maps SDK for Android (Maps Compose). Required for the work-location
+# map screen; the app still builds and runs without it (map renders blank).
+MAPS_API_KEY=your-google-maps-api-key
+
+# Optional: local signing (CI uses the SIGNING_* repository secrets instead).
+# storeFile=househunter.jks
+# storePassword=
+# keyAlias=
+# keyPassword=
