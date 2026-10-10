@@ -44,10 +44,14 @@ class LocationRepository @Inject constructor(
     suspend fun states(forceReload: Boolean = false): List<OsmPlace> = withContext(io) {
         if (statesMemo.isNotEmpty() && !forceReload) return@withContext statesMemo
 
+        // NOTE: a `["ISO3166-2"~"^IN-"]` regex filter looks cheaper but regex value
+        // matching bypasses the Overpass index and reliably times out (504). The
+        // area-based form below returns exactly India's 36 states.
         val live = query(
             """
-            [out:json][timeout:45];
-            relation["boundary"="administrative"]["admin_level"="4"]["ISO3166-2"~"^IN-"];
+            [out:json][timeout:60];
+            area["ISO3166-1"="IN"][admin_level=2]->.india;
+            relation(area.india)["boundary"="administrative"]["admin_level"="4"];
             out tags;
             """.trimIndent(),
             defaultLevel = 4,
@@ -76,7 +80,10 @@ class LocationRepository @Inject constructor(
             """.trimIndent(),
             defaultLevel = 6,
         )
-        live.ifEmpty { adminSnapshot.districts(state.osmId) }
+        live.ifEmpty {
+            lastSource = "snapshot"
+            adminSnapshot.districts(state.osmId)
+        }
     }
 
     /** Localities inside a district: named places plus admin_level 8/9/10 areas. */

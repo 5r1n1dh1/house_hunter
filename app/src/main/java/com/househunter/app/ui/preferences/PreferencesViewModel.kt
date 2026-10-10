@@ -92,9 +92,10 @@ class PreferencesViewModel @Inject constructor(
             it.copy(
                 districts = districts,
                 loading = false,
+                usingFallback = it.usingFallback || locationRepository.lastSource == "snapshot",
                 selectedDistrict = if (select) null else it.selectedDistrict,
                 error = if (districts.isEmpty()) {
-                    "OpenStreetMap has no district list for ${state.name} right now — type it below."
+                    "Could not load districts for ${state.name}. Type the district below."
                 } else {
                     null
                 },
