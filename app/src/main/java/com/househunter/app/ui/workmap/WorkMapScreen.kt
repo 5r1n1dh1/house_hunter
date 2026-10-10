@@ -43,6 +43,7 @@ import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
+import com.househunter.app.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,6 +53,7 @@ fun WorkMapScreen(
     viewModel: WorkMapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    val mapsEnabled = BuildConfig.MAPS_API_KEY.isNotBlank()
 
     val focus = state.activeLocation
     val cameraPositionState = rememberCameraPositionState {
@@ -124,33 +126,55 @@ fun WorkMapScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     FilledTonalButton(onClick = { viewModel.pick(result) }) {
-                        Text("Use \"${result.label}\"")
+                        Text("Use \"${result.label}\" (${"%.4f".format(result.lat)}, ${"%.4f".format(result.lng)})")
                     }
                 }
             }
 
-            GoogleMap(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                cameraPositionState = cameraPositionState,
-                properties = MapProperties(isBuildingEnabled = false),
-                uiSettings = MapUiSettings(
-                    zoomControlsEnabled = false,
-                    mapToolbarEnabled = false,
-                    myLocationButtonEnabled = false,
-                ),
-            ) {
-                state.work1?.let {
-                    Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = "Work 1")
+            if (mapsEnabled) {
+                GoogleMap(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    cameraPositionState = cameraPositionState,
+                    properties = MapProperties(isBuildingEnabled = false),
+                    uiSettings = MapUiSettings(
+                        zoomControlsEnabled = false,
+                        mapToolbarEnabled = false,
+                        myLocationButtonEnabled = false,
+                    ),
+                ) {
+                    state.work1?.let {
+                        Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = "Work 1")
+                    }
+                    state.work2?.let {
+                        Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = "Work 2")
+                    }
+                    state.results.forEach { result ->
+                        Marker(
+                            state = MarkerState(LatLng(result.lat, result.lng)),
+                            title = result.label,
+                        )
+                    }
                 }
-                state.work2?.let {
-                    Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = "Work 2")
-                }
-                state.results.forEach { result ->
-                    Marker(
-                        state = MarkerState(LatLng(result.lat, result.lng)),
-                        title = result.label,
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "Map is disabled: no Google Maps API key was provided to this build.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "Search still works (OpenStreetMap/Nominatim). Add the MAPS_API_KEY repository " +
+                            "secret to see the map. Current selection: " +
+                            (state.activeLocation?.let { "${it.lat}, ${it.lng}" } ?: "none"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
