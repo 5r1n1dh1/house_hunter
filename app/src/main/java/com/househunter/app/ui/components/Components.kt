@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -209,6 +210,8 @@ fun <T> PickerSheet(
     items: List<T>,
     label: (T) -> String,
     isSelected: (T) -> Boolean = { false },
+    manualHint: String? = null,
+    onManual: ((String) -> Unit)? = null,
     onPick: (T) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -230,6 +233,29 @@ fun <T> PickerSheet(
                 .padding(horizontal = 16.dp),
             label = { Text("Search") },
         )
+
+        if (onManual != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = manualHint ?: "Can't find it?",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = {
+                        onManual(query)
+                        onDismiss()
+                    },
+                    enabled = query.trim().length >= 2,
+                ) { Text("Use it") }
+            }
+        }
+
         LazyColumn(modifier = Modifier.heightIn(max = 380.dp)) {
             items(
                 items = items.filter { label(it).contains(query, ignoreCase = true) },

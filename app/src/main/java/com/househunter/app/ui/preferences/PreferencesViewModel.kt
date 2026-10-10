@@ -28,6 +28,7 @@ class PreferencesViewModel @Inject constructor(
         val selectedLocality: OsmPlace? = null,
         val loading: Boolean = false,
         val error: String? = null,
+        val usingFallback: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
@@ -51,12 +52,17 @@ class PreferencesViewModel @Inject constructor(
 
     private suspend fun loadStates() {
         _ui.update { it.copy(loading = true, error = null) }
-        val states = runCatching { locationRepository.states() }.getOrDefault(emptyList())
+        val states = locationRepository.states(forceReload = true)
         _ui.update {
             it.copy(
                 states = states,
                 loading = false,
-                error = if (states.isEmpty()) "Could not load states from OpenStreetMap. Check your connection." else null,
+                usingFallback = locationRepository.lastSource == "snapshot",
+                error = if (states.isEmpty()) {
+                    "Could not reach OpenStreetMap. Check your connection and tap Retry."
+                } else {
+                    null
+                },
             )
         }
     }
@@ -81,13 +87,17 @@ class PreferencesViewModel @Inject constructor(
 
     private suspend fun loadDistricts(state: OsmPlace, select: Boolean) {
         _ui.update { it.copy(loading = true) }
-        val districts = runCatching { locationRepository.districts(state) }.getOrDefault(emptyList())
+        val districts = locationRepository.districts(state)
         _ui.update {
             it.copy(
                 districts = districts,
                 loading = false,
                 selectedDistrict = if (select) null else it.selectedDistrict,
-                error = if (districts.isEmpty()) "No districts found for ${state.name}." else null,
+                error = if (districts.isEmpty()) {
+                    "OpenStreetMap has no district list for ${state.name} right now — type it below."
+                } else {
+                    null
+                },
             )
         }
     }
@@ -106,13 +116,17 @@ class PreferencesViewModel @Inject constructor(
 
     private suspend fun loadLocalities(district: OsmPlace, select: Boolean) {
         _ui.update { it.copy(loading = true) }
-        val localities = runCatching { locationRepository.localities(district) }.getOrDefault(emptyList())
+        val localities = locationRepository.localities(district)
         _ui.update {
             it.copy(
                 localities = localities,
                 loading = false,
                 selectedLocality = if (select) null else it.selectedLocality,
-                error = if (localities.isEmpty()) "No localities found for ${district.name}." else null,
+                error = if (localities.isEmpty()) {
+                    "No localities from OpenStreetMap for ${district.name} — type it below."
+                } else {
+                    null
+                },
             )
         }
     }
@@ -120,6 +134,27 @@ class PreferencesViewModel @Inject constructor(
     fun selectLocality(place: OsmPlace) {
         _ui.update { it.copy(selectedLocality = place, error = null) }
     }
+
+    /** Manual entry: a stable synthetic id keeps the value usable downstream. */
+    fun addManual(name: String, target: Target) {
+        val trimmed = name.trim()
+        if (trimmed.length < 2) return
+        val place = OsmPlace(syntheticId(trimmed), trimmed, when (target) {
+            Target.STATE -> 4
+            Target.DISTRICT -> 6
+            Target.LOCALITY -> 8
+        })
+        when (target) {
+            Target.STATE -> selectState(place)
+            Target.DISTRICT -> selectDistrict(place)
+            Target.LOCALITY -> selectLocality(place)
+        }
+    }
+
+    private fun syntheticId(name: String): Long = name.lowercase()
+        .replace(Regex("[^a-z0-9]"), "")
+        .fold(1125899906842597L) { acc, c -> acc * 31 + c.code }
+        .let { if (it == 0L) 1L else it }
 
     fun save(onSaved: () -> Unit) {
         val state = _ui.value
@@ -132,6 +167,8 @@ class PreferencesViewModel @Inject constructor(
             onSaved()
         }
     }
+
+    enum class Target { STATE, DISTRICT, LOCALITY }
 
     val canSave: Boolean
         get() = _ui.value.selectedState != null && _ui.value.selectedLocality != null

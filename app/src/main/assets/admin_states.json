@@ -1,0 +1,222 @@
+{
+ "source": "OpenStreetMap via Overpass API (relation tags, admin_level=4, ISO3166-2=IN-*)",
+ "note": "Offline fallback for the State dropdown when Overpass is unreachable.",
+ "states": [
+  {
+   "id": 2025855,
+   "name": "Andaman and Nicobar Islands",
+   "iso": "IN-AN",
+   "adminLevel": 4
+  },
+  {
+   "id": 2022095,
+   "name": "Andhra Pradesh",
+   "iso": "IN-AP",
+   "adminLevel": 4
+  },
+  {
+   "id": 2027346,
+   "name": "Arunachal Pradesh",
+   "iso": "IN-AR",
+   "adminLevel": 4
+  },
+  {
+   "id": 2025886,
+   "name": "Assam",
+   "iso": "IN-AS",
+   "adminLevel": 4
+  },
+  {
+   "id": 1958982,
+   "name": "Bihar",
+   "iso": "IN-BR",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942809,
+   "name": "Chandigarh",
+   "iso": "IN-CH",
+   "adminLevel": 4
+  },
+  {
+   "id": 1972004,
+   "name": "Chhattisgarh",
+   "iso": "IN-CG",
+   "adminLevel": 4
+  },
+  {
+   "id": 1952530,
+   "name": "Dadra and Nagar Haveli and Daman and Diu",
+   "iso": "IN-DH",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942586,
+   "name": "Delhi",
+   "iso": "IN-DL",
+   "adminLevel": 4
+  },
+  {
+   "id": 11251493,
+   "name": "Goa",
+   "iso": "IN-GA",
+   "adminLevel": 4
+  },
+  {
+   "id": 1949080,
+   "name": "Gujarat",
+   "iso": "IN-GJ",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942601,
+   "name": "Haryana",
+   "iso": "IN-HR",
+   "adminLevel": 4
+  },
+  {
+   "id": 364186,
+   "name": "Himachal Pradesh",
+   "iso": "IN-HP",
+   "adminLevel": 4
+  },
+  {
+   "id": 1943188,
+   "name": "Jammu and Kashmir",
+   "iso": "IN-JK",
+   "adminLevel": 4
+  },
+  {
+   "id": 1960191,
+   "name": "Jharkhand",
+   "iso": "IN-JH",
+   "adminLevel": 4
+  },
+  {
+   "id": 2019939,
+   "name": "Karnataka",
+   "iso": "IN-KA",
+   "adminLevel": 4
+  },
+  {
+   "id": 2018151,
+   "name": "Kerala",
+   "iso": "IN-KL",
+   "adminLevel": 4
+  },
+  {
+   "id": 5515045,
+   "name": "Ladakh",
+   "iso": "IN-LA",
+   "adminLevel": 4
+  },
+  {
+   "id": 2027460,
+   "name": "Lakshadweep",
+   "iso": "IN-LD",
+   "adminLevel": 4
+  },
+  {
+   "id": 1950071,
+   "name": "Madhya Pradesh",
+   "iso": "IN-MP",
+   "adminLevel": 4
+  },
+  {
+   "id": 1950884,
+   "name": "Maharashtra",
+   "iso": "IN-MH",
+   "adminLevel": 4
+  },
+  {
+   "id": 2027869,
+   "name": "Manipur",
+   "iso": "IN-MN",
+   "adminLevel": 4
+  },
+  {
+   "id": 2027521,
+   "name": "Meghalaya",
+   "iso": "IN-ML",
+   "adminLevel": 4
+  },
+  {
+   "id": 2029046,
+   "name": "Mizoram",
+   "iso": "IN-MZ",
+   "adminLevel": 4
+  },
+  {
+   "id": 2027973,
+   "name": "Nagaland",
+   "iso": "IN-NL",
+   "adminLevel": 4
+  },
+  {
+   "id": 1984022,
+   "name": "Odisha",
+   "iso": "IN-OD",
+   "adminLevel": 4
+  },
+  {
+   "id": 107001,
+   "name": "Puducherry",
+   "iso": "IN-PY",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942686,
+   "name": "Punjab",
+   "iso": "IN-PB",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942920,
+   "name": "Rajasthan",
+   "iso": "IN-RJ",
+   "adminLevel": 4
+  },
+  {
+   "id": 1791324,
+   "name": "Sikkim",
+   "iso": "IN-SK",
+   "adminLevel": 4
+  },
+  {
+   "id": 96905,
+   "name": "Tamil Nadu",
+   "iso": "IN-TN",
+   "adminLevel": 4
+  },
+  {
+   "id": 3250963,
+   "name": "Telangana",
+   "iso": "IN-TS",
+   "adminLevel": 4
+  },
+  {
+   "id": 2026458,
+   "name": "Tripura",
+   "iso": "IN-TR",
+   "adminLevel": 4
+  },
+  {
+   "id": 1942587,
+   "name": "Uttar Pradesh",
+   "iso": "IN-UP",
+   "adminLevel": 4
+  },
+  {
+   "id": 9987086,
+   "name": "Uttarakhand",
+   "iso": "IN-UK",
+   "adminLevel": 4
+  },
+  {
+   "id": 1960177,
+   "name": "West Bengal",
+   "iso": "IN-WB",
+   "adminLevel": 4
+  }
+ ]
+}

@@ -16,26 +16,46 @@ import javax.inject.Singleton
 
 /**
  * Cascading State -> District -> Locality dropdowns backed by OpenStreetMap
- * Overpass. Results are kept in memory for the session only (zero-cache policy).
+ * Overpass.
+ *
+ * Robustness notes (learned the hard way):
+ *  - Overpass answers **406** unless an identifying User-Agent is sent (see
+ *    [com.househunter.app.di.NetworkModule]).
+ *  - Public Overpass instances time out (504) frequently, so every query is
+ *    retried against a second mirror.
+ *  - Containment queries (`relation(area.x)`) are expensive; the cheapest
+ *    formulation is used for each level.
+ *  - A bundled OSM-derived snapshot ([AdminSnapshot]) is the last-resort
+ *    fallback so the dropdowns always open, even fully offline.
  */
 @Singleton
 class LocationRepository @Inject constructor(
     private val overpass: OverpassApi,
     @OverpassMirror private val overpassMirror: OverpassApi,
+    private val adminSnapshot: AdminSnapshot,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) {
 
     private val statesMemo = mutableListOf<OsmPlace>()
 
+    /** "live" when the last state query came from Overpass, "snapshot" when bundled. */
+    @Volatile
+    var lastSource: String = "live"
+        private set
+
     suspend fun states(forceReload: Boolean = false): List<OsmPlace> = withContext(io) {
         if (statesMemo.isNotEmpty() && !forceReload) return@withContext statesMemo
-        val query = """
-            [out:json][timeout:25];
-            area["ISO3166-1"="IN"][admin_level=2]->.india;
-            relation(area.india)["boundary"="administrative"]["admin_level"="4"];
+
+        val live = query(
+            """
+            [out:json][timeout:45];
+            relation["boundary"="administrative"]["admin_level"="4"]["ISO3166-2"~"^IN-"];
             out tags;
-        """.trimIndent()
-        val places = runOverpass(query) { parseElements(it, 4) }
+            """.trimIndent(),
+            defaultLevel = 4,
+        )
+        lastSource = if (live.isEmpty()) "snapshot" else "live"
+        val places = live.ifEmpty { adminSnapshot.states() }
         if (places.isNotEmpty()) {
             statesMemo.clear()
             statesMemo.addAll(places)
@@ -43,57 +63,72 @@ class LocationRepository @Inject constructor(
         statesMemo.toList()
     }
 
-    /** Districts of a state. Indian admin levels vary (5/6/7), so all are accepted. */
+    /**
+     * Districts of a state. Uses area containment, which is the only reliable way;
+     * falls back to the bundled snapshot when Overpass is unavailable.
+     */
     suspend fun districts(state: OsmPlace): List<OsmPlace> = withContext(io) {
-        val query = """
-            [out:json][timeout:25];
-            rel(id:${state.osmId});
-            map_to_area->.a;
-            relation(area.a)["boundary"="administrative"]["admin_level"~"^(5|6|7)$"];
+        val areaId = areaId(state.osmId)
+        val live = query(
+            """
+            [out:json][timeout:60];
+            area(id:$areaId)->.s;
+            relation(area.s)["boundary"="administrative"]["admin_level"~"^(5|6|7)$"];
             out tags;
-        """.trimIndent()
-        runOverpass(query) { parseElements(it, 6) }
+            """.trimIndent(),
+            defaultLevel = 6,
+        )
+        live.ifEmpty { adminSnapshot.districts(state.osmId) }
     }
 
     /** Localities inside a district: named places plus admin_level 8/9/10 areas. */
     suspend fun localities(district: OsmPlace): List<OsmPlace> = withContext(io) {
-        val query = """
-            [out:json][timeout:25];
-            rel(id:${district.osmId});
-            map_to_area->.a;
-            node(area.a)["place"~"^(city|town|suburb|quarter|neighbourhood|hamlet|village)$"];
+        val areaId = areaId(district.osmId)
+        val places = query(
+            """
+            [out:json][timeout:60];
+            area(id:$areaId)->.d;
+            node(area.d)["place"~"^(city|town|suburb|quarter|neighbourhood|hamlet|village)$"];
             out tags;
-        """.trimIndent()
-        val places = runOverpass(query) { parseElements(it, 8) }
-
-        val areaQuery = """
-            [out:json][timeout:25];
-            rel(id:${district.osmId});
-            map_to_area->.a;
-            relation(area.a)["boundary"="administrative"]["admin_level"~"^(8|9|10)$"];
+            """.trimIndent(),
+            defaultLevel = 8,
+        )
+        val areas = query(
+            """
+            [out:json][timeout:60];
+            area(id:$areaId)->.d;
+            relation(area.d)["boundary"="administrative"]["admin_level"~"^(8|9|10)$"];
             out tags;
-        """.trimIndent()
-        val areas = runOverpass(areaQuery) { parseElements(it, 9) }
-
+            """.trimIndent(),
+            defaultLevel = 9,
+        )
         (places + areas)
             .distinctBy { it.name.lowercase() }
             .sortedBy { it.name }
     }
 
-    private suspend fun runOverpass(
+    /** Runs [query] against the primary endpoint, then the mirror (Overpass often 504s). */
+    private suspend fun query(
         query: String,
-        parse: (JSONObject) -> List<OsmPlace>,
+        defaultLevel: Int,
     ): List<OsmPlace> {
-        val primary = runCatching { overpass.run(query).string() }.getOrNull()
-        if (primary != null) {
-            val parsed = runCatching { parse(JSONObject(primary)) }.getOrDefault(emptyList())
-            if (parsed.isNotEmpty()) return parsed
+        val endpoints = listOf(overpass, overpassMirror)
+        endpoints.forEachIndexed { index, api ->
+            if (index > 0) delay(500)
+            // Two attempts per endpoint: these servers fail transiently very often.
+            repeat(2) { attempt ->
+                val parsed = runCatching { api.run(query).string() }
+                    .mapCatching { parseElements(JSONObject(it), defaultLevel) }
+                    .getOrNull()
+                    .orEmpty()
+                if (parsed.isNotEmpty()) return parsed
+                if (attempt == 0) delay(1_200)
+            }
         }
-        val mirror = runCatching { overpassMirror.run(query).string() }.getOrNull() ?: return emptyList()
-        return runCatching { parse(JSONObject(mirror)) }.getOrDefault(emptyList())
+        return emptyList()
     }
 
-    private fun parseElements(json: JSONObject, adminLevel: Int): List<OsmPlace> {
+    private fun parseElements(json: JSONObject, defaultLevel: Int): List<OsmPlace> {
         val elements = json.optJSONArray("elements") ?: JSONArray()
         val result = mutableListOf<OsmPlace>()
         for (i in 0 until elements.length()) {
@@ -102,10 +137,15 @@ class LocationRepository @Inject constructor(
             val name = tags.optString("name:en").takeIf { it.isNotBlank() }
                 ?: tags.optString("name").takeIf { it.isNotBlank() }
                 ?: continue
-            val level = tags.optString("admin_level").toIntOrNull() ?: adminLevel
+            val level = tags.optString("admin_level").toIntOrNull() ?: defaultLevel
             result += OsmPlace(element.optLong("id"), name, level)
         }
         return result
+    }
+
+    private companion object {
+        /** OSM relation ids map to negative area ids via this offset. */
+        fun areaId(relationId: Long): Long = 3_600_000_000L + relationId
     }
 }
 

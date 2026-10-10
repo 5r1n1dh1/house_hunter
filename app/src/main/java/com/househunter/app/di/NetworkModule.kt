@@ -9,6 +9,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
@@ -27,6 +28,19 @@ annotation class OverpassMirror
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
+    /**
+     * Overpass (Apache fronted) answers **406 Not Acceptable** to requests without
+     * an identifying User-Agent, so this interceptor is mandatory, not cosmetic.
+     */
+    private val headersInterceptor = Interceptor { chain ->
+        val request = chain.request().newBuilder()
+            .header("User-Agent", HttpFetcher.USER_AGENT)
+            .header("Accept", "application/json, text/html;q=0.9, */*;q=0.8")
+            .header("Accept-Language", "en-IN,en;q=0.9")
+            .build()
+        chain.proceed(request)
+    }
+
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
@@ -34,6 +48,7 @@ object NetworkModule {
         .readTimeout(30, TimeUnit.SECONDS)
         .callTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        .addInterceptor(headersInterceptor)
         .build()
 
     @Provides
@@ -48,7 +63,7 @@ object NetworkModule {
     @Singleton
     @OverpassMirror
     fun provideOverpassMirrorApi(client: OkHttpClient): OverpassApi = Retrofit.Builder()
-        .baseUrl("https://overpass.kumi.systems/api/")
+        .baseUrl("https://maps.mail.ru/osm/tools/overpass/api/")
         .client(client)
         .build()
         .create(OverpassApi::class.java)

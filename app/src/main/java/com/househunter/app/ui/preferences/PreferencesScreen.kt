@@ -53,7 +53,8 @@ fun PreferencesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "All three lists come from OpenStreetMap (Overpass API).",
+                text = "All three lists come from OpenStreetMap (Overpass API)." +
+                    if (state.usingFallback) " Using the bundled OSM snapshot — Overpass is unreachable." else "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -113,6 +114,8 @@ fun PreferencesScreen(
             items = state.states,
             label = { it.name },
             isSelected = { it.osmId == state.selectedState?.osmId },
+            manualHint = "State not listed?",
+            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.STATE) },
             onPick = viewModel::selectState,
             onDismiss = { sheet = null },
         )
@@ -122,6 +125,8 @@ fun PreferencesScreen(
             items = state.districts,
             label = { it.name },
             isSelected = { it.osmId == state.selectedDistrict?.osmId },
+            manualHint = "District not listed?",
+            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.DISTRICT) },
             onPick = viewModel::selectDistrict,
             onDismiss = { sheet = null },
         )
@@ -131,6 +136,8 @@ fun PreferencesScreen(
             items = state.localities,
             label = { it.name },
             isSelected = { it.osmId == state.selectedLocality?.osmId },
+            manualHint = "Locality not listed?",
+            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.LOCALITY) },
             onPick = viewModel::selectLocality,
             onDismiss = { sheet = null },
         )
