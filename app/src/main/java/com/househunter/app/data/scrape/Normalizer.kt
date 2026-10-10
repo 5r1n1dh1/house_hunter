@@ -16,7 +16,7 @@ object Normalizer {
         Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*k\\b").find(clean)?.let { match ->
             return match.groupValues[1].toDoubleOrNull()?.times(1_000.0)
         }
-        val digits = clean.filter { it.isDigit() || it == '.' }
+        val digits = clean.filter { it.isDigit() || it == '.' }.toString()
         return digits.toDoubleOrNull()?.takeIf { it > 0 }
     }
 
@@ -38,10 +38,10 @@ object Normalizer {
         return match.groupValues[1].toDoubleOrNull()
     }
 
-    /** Digits only, keeping a leading + for phone numbers. */
+    /** Digits only, keeping the country code (e.g. +91 98765 43210 -> 919876543210). */
     fun sanitizePhone(text: String?): String? {
         if (text.isNullOrBlank()) return null
-        val digits = text.filter { it.isDigit() }.joinToString("")
+        val digits = text.replace(Regex("[^0-9]"), "")
         if (digits.length < 8) return null
         return digits
     }

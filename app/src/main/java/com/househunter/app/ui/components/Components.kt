@@ -67,8 +67,8 @@ fun formatArea(sqft: Double?): String? = sqft?.let { "${it.toInt()} sqft" }
 fun IconActionButton(
     icon: ImageVector,
     contentDescription: String,
-    enabled: Boolean = true,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
         Icon(
@@ -158,7 +158,12 @@ fun ListingCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconActionButton(Icons.Filled.Call, "Call owner", !listing.phone.isNullOrBlank(), onCall)
+                    IconActionButton(
+                        icon = Icons.Filled.Call,
+                        contentDescription = "Call owner",
+                        onClick = onCall,
+                        enabled = !listing.phone.isNullOrBlank(),
+                    )
                     IconActionButton(Icons.Filled.Place, "Locate on map", onLocate)
                     IconActionButton(Icons.Filled.PhotoCamera, "Photos", onPhotos)
                     IconActionButton(Icons.Filled.OpenInNew, "Open original listing", onOpenBrowser)

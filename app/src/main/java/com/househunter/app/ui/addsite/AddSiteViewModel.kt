@@ -94,7 +94,7 @@ class AddSiteViewModel @Inject constructor(
         }
         return SiteConfig(
             id = "custom-" + Random.nextInt(100_000, 999_999).toString() + "-" +
-                name.lowercase().replace(Regex("[^a-z0-9]"), "").take(12),
+                state.name.lowercase().replace(Regex("[^a-z0-9]"), "").take(12),
             name = state.name.trim(),
             baseUrl = state.baseUrl.trim(),
             searchUrlTemplate = state.searchUrlTemplate.trim(),
