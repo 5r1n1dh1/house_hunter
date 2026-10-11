@@ -56,7 +56,9 @@ class SourceUnlockTest {
     fun stillRejectsTinyNumbersAfterLacSupport() {
         assertNull(Normalizer.parseRent("1"))
         assertNull(Normalizer.parseRent("2"))
-        assertNull(Normalizer.parseRent("₹1 Lac".replace("1 Lac", "1 Lac")))
+        assertNull(Normalizer.parseRent("₹2"))
+        // "1 Lac" is a real ₹100,000 rent, so it must survive the plausibility guard.
+        assertEquals(100000.0, Normalizer.parseRent("₹1 Lac")!!, 0.01)
     }
 
     @Test

@@ -60,7 +60,7 @@ object Normalizer {
     /** "2 BHK" | "3bhk" | "2.5 BHK" -> 2 */
     fun parseBhk(text: String?): Int? {
         if (text.isNullOrBlank()) return null
-        val match = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*(?:bhk|bed)").find(text) ?: return null
+        val match = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)[\\s_-]*(?:bhk|bed)").find(text) ?: return null
         val value = match.groupValues[1].toDoubleOrNull() ?: return null
         return value.toInt().coerceIn(1, 20)
     }
