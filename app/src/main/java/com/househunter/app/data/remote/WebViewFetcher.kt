@@ -300,9 +300,9 @@ class WebViewFetcher @Inject constructor(
         }
 
         override fun onJsPrompt(
-            view: WebView,
+            view: WebView?,
             message: String,
-            defaultValue: String,
+            defaultValue: String?,
             result: JsPromptResult,
         ): Boolean {
             result.cancel()
