@@ -1,6 +1,7 @@
 package com.househunter.app.data.repository
 
 import com.househunter.app.data.scrape.Normalizer
+import com.househunter.app.data.scrape.SiteConfig
 import com.househunter.app.data.scrape.SiteRegistry
 import com.househunter.app.data.scrape.SiteScraper
 import com.househunter.app.di.IoDispatcher
@@ -8,9 +9,13 @@ import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.SiteStatus
 import com.househunter.app.domain.model.UserPrefs
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,6 +23,22 @@ import javax.inject.Singleton
 /**
  * Live data layer: scrapes every enabled site on demand and holds the results
  * **in memory only**. Nothing is persisted, so the app never shows stale data.
+ *
+ * **Concurrent and streaming.** Sources used to be scraped strictly one after
+ * another and `_listings` was assigned exactly once, at the very end, so a user
+ * waited ~64s (the sum of every site's rate limit x pages) staring at a spinner
+ * and then saw all 70 listings at once. Now every enabled site is scraped
+ * concurrently and each one publishes the moment it lands, so the first cards
+ * appear after the quickest site (~5s) while the slowest is still fetching.
+ *
+ * This is safe to parallelise because the two shared pieces are already
+ * concurrency-aware: `SiteScraper` holds no mutable state between calls (all
+ * accumulators are call-local), and `HttpFetcher` throttles per host, so
+ * different sites never serialise against each other's rate limit.
+ *
+ * Per-site results are kept in [bySite] rather than appended to one list, so a
+ * site that is re-scraped has its previous batch *replaced* instead of
+ * accumulating stale duplicates across refreshes.
  */
 @Singleton
 class ListingRepository @Inject constructor(
@@ -38,36 +59,79 @@ class ListingRepository @Inject constructor(
 
     private val byId = LinkedHashMap<String, Listing>()
 
+    /** Latest batch per site; guarded by [mergeLock] because scrapes finish concurrently. */
+    private val bySite = LinkedHashMap<String, List<Listing>>()
+    private val mergeLock = Mutex()
+
+    /** Guards re-entrancy: a second refresh while one is running is a no-op. */
+    private val refreshLock = Mutex()
+
     suspend fun refresh(prefs: UserPrefs): List<Listing> = withContext(io) {
-        if (_refreshing.value) return@withContext _listings.value
+        // `tryLock`, not a `_refreshing` check-then-set: two concurrent callers
+        // could both observe false and both start scraping every site.
+        if (!refreshLock.tryLock()) return@withContext _listings.value
         _refreshing.value = true
 
-        val sites = registry.enabled()
-        _status.value = sites.map { SiteStatus(it.id, it.name, loading = true) }
+        try {
+            val sites = registry.enabled()
+            _status.value = sites.map { SiteStatus(it.id, it.name, loading = true) }
 
-        val collected = mutableListOf<Listing>()
-        sites.forEach { site ->
-            val error = runCatching {
-                val parsed = scraper.scrape(site, prefs)
-                collected += parsed
-                updateStatus(site.id) { it.copy(count = parsed.size, loading = false) }
-                null
-            }.exceptionOrNull()?.let { throwable ->
-                updateStatus(site.id) { it.copy(loading = false, error = throwable.message ?: "fetch failed") }
-                throwable.message ?: "fetch failed"
+            // Resolved once, not per site: it may hit Nominatim, which is rate
+            // limited to one request per second.
+            val fallbackPoint = resolveFallbackPoint(prefs)
+
+            coroutineScope {
+                sites.map { site ->
+                    async {
+                        runCatching { scraper.scrape(site, prefs) }
+                            .onSuccess { parsed ->
+                                publish(site, parsed, fallbackPoint)
+                                updateStatus(site.id) {
+                                    it.copy(count = parsed.size, loading = false)
+                                }
+                            }
+                            .onFailure { throwable ->
+                                // One dead source must never cancel the others,
+                                // so this is swallowed here rather than propagated.
+                                updateStatus(site.id) {
+                                    it.copy(
+                                        loading = false,
+                                        error = throwable.message ?: "fetch failed",
+                                    )
+                                }
+                            }
+                    }
+                }.awaitAll()
             }
+
+            _listings.value
+        } finally {
+            // Always clears: previously a throw from coordinate-fallback left
+            // `_refreshing` stuck true and every later refresh silently no-opped.
+            _refreshing.value = false
+            refreshLock.unlock()
         }
+    }
 
-        val deduped = dedupe(collected)
-        val located = attachFallbackCoordinates(deduped, prefs)
-
-        synchronized(byId) {
+    /**
+     * Merges one site's results and pushes them to observers immediately.
+     *
+     * Under [mergeLock] because scrapes complete concurrently; the critical
+     * section is pure in-memory work so contention is negligible.
+     */
+    private suspend fun publish(
+        site: SiteConfig,
+        parsed: List<Listing>,
+        fallbackPoint: Pair<Double, Double>?,
+    ) {
+        val located = applyFallback(parsed, fallbackPoint)
+        mergeLock.withLock {
+            bySite[site.id] = located
+            val merged = dedupe(bySite.values.flatten())
             byId.clear()
-            byId.putAll(located.associateBy { it.id })
+            byId.putAll(merged.associateBy { it.id })
+            _listings.value = merged
         }
-        _listings.value = located
-        _refreshing.value = false
-        located
     }
 
     fun find(id: String): Listing? = synchronized(byId) { byId[id] }
@@ -100,25 +164,29 @@ class ListingRepository @Inject constructor(
         }
     }
 
-    /** Most sites expose no coordinates: fall back to the selected locality centroid. */
-    private suspend fun attachFallbackCoordinates(listings: List<Listing>, prefs: UserPrefs): List<Listing> {
-        val missing = listings.any { it.lat == null || it.lng == null }
-        if (!missing) return listings
-
-        // The locality picked in onboarding already carries real Nominatim coordinates.
+    /**
+     * Centroid used for listings that publish no coordinates.
+     *
+     * Resolved **once per refresh** rather than per site: the geocoder fallback
+     * path hits Nominatim, which enforces a one-request-per-second policy, so
+     * resolving it inside the per-site path would serialise the whole fan-out.
+     */
+    private suspend fun resolveFallbackPoint(prefs: UserPrefs): Pair<Double, Double>? {
         val locality = prefs.locality
-        val point = when {
-            locality?.lat != null && locality.lng != null -> locality.lat to locality.lng
-            else -> {
-                val query = listOfNotNull(
-                    prefs.locality?.name,
-                    prefs.district?.name,
-                    prefs.state?.name,
-                ).joinToString(", ").takeIf { it.isNotBlank() } ?: return listings
-                geocoder.geocode(query) ?: return listings
-            }
-        }
+        if (locality?.lat != null && locality.lng != null) return locality.lat to locality.lng
+        val query = listOfNotNull(
+            prefs.locality?.name,
+            prefs.district?.name,
+            prefs.state?.name,
+        ).joinToString(", ").takeIf { it.isNotBlank() } ?: return null
+        return geocoder.geocode(query)
+    }
 
+    private fun applyFallback(
+        listings: List<Listing>,
+        point: Pair<Double, Double>?,
+    ): List<Listing> {
+        if (point == null) return listings
         return listings.map { listing ->
             if (listing.lat != null && listing.lng != null) listing
             else listing.copy(lat = point.first, lng = point.second)
