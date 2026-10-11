@@ -72,6 +72,24 @@ jobs:
       - name: Unit tests & lint
         run: ./gradlew testDebugUnitTest lintDebug --no-daemon --stacktrace
 
+      # Gradle prints nothing for passing tests, so a green run cannot be told apart
+      # from "no tests ran". Summarise the JUnit XML explicitly.
+      - name: Test summary
+        run: |
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          total = failed = errors = skipped = 0
+          for f in glob.glob("app/build/test-results/testDebugUnitTest/*.xml"):
+              r = ET.parse(f).getroot()
+              total += int(r.get("tests", 0))
+              failed += int(r.get("failures", 0))
+              errors += int(r.get("errors", 0))
+              skipped += int(r.get("skipped", 0))
+          print(f"tests: {total} | failures: {failed} | errors: {errors} | skipped: {skipped}")
+          if total == 0:
+              raise SystemExit("::error::no unit tests were executed")
+          PY
+
       - name: Assemble release APK (unsigned)
         run: ./gradlew assembleRelease --no-daemon --stacktrace
         env:
