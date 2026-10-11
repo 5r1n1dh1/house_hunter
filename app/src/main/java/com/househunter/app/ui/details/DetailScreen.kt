@@ -288,9 +288,12 @@ fun DetailScreen(
         }
     }
 
-    if (showMap && listing != null) {
+    // smart-cast is impossible across the `remember` boundary, so bind once:
+    // an empty-map URL would otherwise throw on a recomposition.
+    val mapListing = listing
+    if (showMap && mapListing != null) {
         MapBottomSheet(
-            listing = listing!!,
+            listing = mapListing,
             prefs = prefs,
             onDismiss = { showMap = false },
         )

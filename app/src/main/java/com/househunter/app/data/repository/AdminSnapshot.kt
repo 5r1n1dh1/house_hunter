@@ -3,6 +3,8 @@ package com.househunter.app.data.repository
 import android.content.Context
 import com.househunter.app.domain.model.OsmPlace
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,11 +39,21 @@ class AdminSnapshot @Inject constructor(
     suspend fun districts(stateId: Long): List<OsmPlace> =
         load()[stateId]?.districts.orEmpty()
 
-    private fun load(): Map<Long, StateEntry> {
+    /**
+     * Parsed off the main thread: the snapshot is ~360 KB of JSON and this runs
+     * during the onboarding screen's first frame, where a main-thread parse is a
+     * dropped-frame (and on a slow device, an ANR).
+     */
+    private suspend fun load(): Map<Long, StateEntry> {
         cached?.let { return it }
-        return runCatching {
-            val json = context.assets.open(ASSET).bufferedReader().use { it.readText() }
-            val array = JSONObject(json).optJSONArray("states") ?: return emptyMap()
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                val json = context.assets.open(ASSET).bufferedReader().use { it.readText() }
+                // `return@runCatching` rather than a bare `return`: the latter is a
+                // non-local return out of the suspend caller's frame, which also
+                // skipped the cache write below.
+                val array = JSONObject(json).optJSONArray("states")
+                    ?: return@runCatching emptyMap()
             (0 until array.length()).mapNotNull { index ->
                 val item = array.optJSONObject(index) ?: return@mapNotNull null
                 val id = item.optLong("id")
@@ -60,7 +72,8 @@ class AdminSnapshot @Inject constructor(
                 }
                 id to StateEntry(id, name, districts)
             }.toMap()
-        }.getOrDefault(emptyMap()).also { cached = it }
+            }.getOrDefault(emptyMap()).also { cached = it }
+        }
     }
 
     private companion object {

@@ -38,6 +38,14 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.househunter.app.data.scrape.SiteConfig
 import com.househunter.app.ui.components.Pill
+import import com.househunter.app.CrashLog
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +117,85 @@ fun SitesScreen(
                         }
                     },
                 )
+            }
+
+            item {
+                DiagnosticsCard()
+            }
+        }
+    }
+}
+
+/**
+ * Shows the last crash recorded by [CrashLog] and lets the user share it.
+ *
+ * A crash on a specific handset (different SoC, Android build, Play Services
+ * state) cannot be reproduced from CI, so the stack trace has to be
+ * collectible from the device itself. Nothing leaves the phone unless the user
+ * taps Share.
+ */
+@Composable
+private fun DiagnosticsCard() {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf(CrashLog.read(context)) }
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text("Diagnostics", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (text == null) {
+                    "No crashes recorded on this device."
+                } else {
+                    "Last crash recorded on this device. Share it if the app closes unexpectedly."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (text != null) {
+                Spacer(Modifier.height(10.dp))
+                if (expanded) {
+                    Text(
+                        text = text!!.takeLast(4000),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(if (expanded) "Hide log" else "Show log")
+                    }
+                    TextButton(onClick = {
+                        runCatching {
+                            context.startActivity(
+                                android.content.Intent.createChooser(
+                                    android.content.Intent(
+                                        android.content.Intent.ACTION_SEND,
+                                    ).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            android.content.Intent.EXTRA_TEXT,
+                                            "HouseHunter crash log:\n\n${text.orEmpty()}",
+                                        )
+                                    },
+                                    "Share crash log",
+                                ),
+                            )
+                        }
+                    }) { Text("Share") }
+                    TextButton(onClick = {
+                        CrashLog.clear(context)
+                        text = CrashLog.read(context)
+                    }) { Text("Clear") }
+                }
             }
         }
     }

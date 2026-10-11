@@ -13,5 +13,13 @@ import dagger.hilt.android.HiltAndroidApp
  */
 @HiltAndroidApp
 class HouseHunterApp : Application(), coil.ImageLoaderFactory {
+
+    override fun onCreate() {
+        super.onCreate()
+        // Installed before anything else so a failure during startup is captured
+        // too, not just crashes after the first frame.
+        CrashLog.install(this)
+    }
+
     override fun newImageLoader(): ImageLoader = HouseImageLoaderFactory.create(this)
 }
