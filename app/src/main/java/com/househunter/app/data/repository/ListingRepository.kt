@@ -15,6 +15,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -129,8 +130,14 @@ class ListingRepository @Inject constructor(
         mergeLock.withLock {
             bySite[site.id] = located
             val merged = dedupe(bySite.values.flatten())
-            byId.clear()
-            byId.putAll(merged.associateBy { it.id })
+            // Every access to `byId` - here, in `find` and in `loadDetail` - takes
+            // this one monitor. An earlier version guarded the writes here with
+            // `mergeLock` but the reads with `synchronized(byId)`, and a main-thread
+            // `find` racing a rebuild could observe the map mid-`clear`/`putAll`.
+            synchronized(byId) {
+                byId.clear()
+                byId.putAll(merged.associateBy { it.id })
+            }
             _listings.value = merged
         }
     }
@@ -144,12 +151,18 @@ class ListingRepository @Inject constructor(
         val config = registry.find(current.siteId) ?: return@withContext current
         val detailed = scraper.fetchDetail(config, current)
         synchronized(byId) { byId[id] = detailed }
-        _listings.value = _listings.value.map { if (it.id == id) detailed else it }
+        // `update`, not `value = value.map{}`: the latter is a non-atomic
+        // read-modify-write that loses a concurrent `publish` rebuild and reverts
+        // this listing to its un-enriched copy.
+        _listings.update { current -> current.map { if (it.id == id) detailed else it } }
         detailed
     }
 
     private fun updateStatus(id: String, block: (SiteStatus) -> SiteStatus) {
-        _status.value = _status.value.map { if (it.siteId == id) block(it) else it }
+        // `update` is atomic; sites complete concurrently and a plain read-modify-
+        // write dropped whichever update lost the race, stranding a row on
+        // `loading = true` for the rest of the refresh.
+        _status.update { current -> current.map { if (it.siteId == id) block(it) else it } }
     }
 
     private fun dedupe(listings: List<Listing>): List<Listing> {

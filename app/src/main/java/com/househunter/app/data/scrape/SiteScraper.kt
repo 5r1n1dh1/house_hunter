@@ -2,7 +2,6 @@ package com.househunter.app.data.scrape
 
 import com.househunter.app.data.remote.HttpFetcher
 import com.househunter.app.data.remote.PageFetcher
-import com.househunter.app.data.remote.WebViewFetcher
 import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.UserPrefs
 import org.jsoup.Jsoup
@@ -17,7 +16,7 @@ import javax.inject.Singleton
  * new site never requires new code.
  */
 @Singleton
-class SiteScraper @Inject constructor(
+open class SiteScraper @Inject constructor(
     private val fetcher: HttpFetcher,
     /**
      * Real-browser engine for CDNs that reject plain HTTP clients (99acres' Cloudflare
@@ -28,7 +27,7 @@ class SiteScraper @Inject constructor(
      * Null only in plain-JVM unit tests (Kotlin default argument); Hilt always injects
      * a real instance, because Dagger supplies every constructor parameter.
      */
-    private val webViewFetcher: WebViewFetcher? = null,
+    private val webViewFetcher: PageFetcher? = null,
 ) {
 
     /** Builds the search URL from the template + current preferences. */
@@ -66,7 +65,7 @@ class SiteScraper @Inject constructor(
     private fun engineFor(config: SiteConfig): PageFetcher =
         if (config.needsBrowser) webViewFetcher ?: fetcher else fetcher
 
-    suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> = when (config.mode) {
+    open suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> = when (config.mode) {
         SourceMode.JSON -> scrapeJson(config, prefs)
         SourceMode.SITEMAP -> scrapeSitemap(config, prefs)
         else -> scrapeCards(config, prefs)

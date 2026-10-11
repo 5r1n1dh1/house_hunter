@@ -1,8 +1,11 @@
 package com.househunter.app.di
 
 import com.househunter.app.data.remote.HttpFetcher
+import com.househunter.app.data.scrape.DefaultSiteRegistry
+import com.househunter.app.data.scrape.SiteRegistry
 import com.househunter.app.data.remote.NominatimApi
 import com.househunter.app.data.remote.OverpassApi
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -14,6 +17,19 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class NetworkBindingsModule {
+
+    /**
+     * The asset/DataStore-backed implementation, bound to the [SiteRegistry]
+     * interface so the scrape pipeline is substitutable in JVM tests.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindSiteRegistry(impl: DefaultSiteRegistry): SiteRegistry
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
