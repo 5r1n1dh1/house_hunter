@@ -14,81 +14,54 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Cascading State -> District -> Locality dropdowns backed by OpenStreetMap
- * Overpass.
+ * Location data for the dropdowns.
  *
- * Robustness notes (learned the hard way):
- *  - Overpass answers **406** unless an identifying User-Agent is sent (see
- *    [com.househunter.app.di.NetworkModule]).
- *  - Public Overpass instances time out (504) frequently, so every query is
- *    retried against a second mirror.
- *  - Containment queries (`relation(area.x)`) are expensive; the cheapest
- *    formulation is used for each level.
- *  - A bundled OSM-derived snapshot ([AdminSnapshot]) is the last-resort
- *    fallback so the dropdowns always open, even fully offline.
+ * Why this no longer queries Overpass up front: Overpass answers in 10-60 s (and
+ * frequently 504s) because admin hierarchy lookups need expensive spatial
+ * containment. Measured alternatives:
+ *  - States + districts come from the bundled OSM snapshot  -> instant, offline.
+ *  - Localities use Nominatim type-ahead                  -> ~0.8 s, free, no key.
+ *  - Overpass is still available for an explicit "browse everything" action, which
+ *    is the only thing Overpass is genuinely better at (full enumeration).
  */
 @Singleton
 class LocationRepository @Inject constructor(
     private val overpassApis: Set<@JvmSuppressWildcards OverpassApi>,
+    private val nominatim: NominatimApi,
     private val adminSnapshot: AdminSnapshot,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) {
 
-    private val statesMemo = mutableListOf<OsmPlace>()
+    /** States are bundled: returns immediately, no network. */
+    suspend fun states(): List<OsmPlace> = adminSnapshot.states()
 
-    /** "live" when the last state query came from Overpass, "snapshot" when bundled. */
-    @Volatile
-    var lastSource: String = "live"
-        private set
-
-    suspend fun states(forceReload: Boolean = false): List<OsmPlace> = withContext(io) {
-        if (statesMemo.isNotEmpty() && !forceReload) return@withContext statesMemo
-
-        // NOTE: a `["ISO3166-2"~"^IN-"]` regex filter looks cheaper but regex value
-        // matching bypasses the Overpass index and reliably times out (504). The
-        // area-based form below returns exactly India's 36 states.
-        val live = query(
-            """
-            [out:json][timeout:60];
-            area["ISO3166-1"="IN"][admin_level=2]->.india;
-            relation(area.india)["boundary"="administrative"]["admin_level"="4"];
-            out tags;
-            """.trimIndent(),
-            defaultLevel = 4,
-        )
-        lastSource = if (live.isEmpty()) "snapshot" else "live"
-        val places = live.ifEmpty { adminSnapshot.states() }
-        if (places.isNotEmpty()) {
-            statesMemo.clear()
-            statesMemo.addAll(places)
-        }
-        statesMemo.toList()
-    }
+    /** Districts of a state are bundled: returns immediately, no network. */
+    suspend fun districts(state: OsmPlace): List<OsmPlace> = adminSnapshot.districts(state.osmId)
 
     /**
-     * Districts of a state. Uses area containment, which is the only reliable way;
-     * falls back to the bundled snapshot when Overpass is unavailable.
+     * Locality type-ahead via Nominatim (free, no API key, ~1 s).
+     * Results are filtered to the selected district/state, and carry real
+     * coordinates so Work-distance calculations do not need a second geocode.
      */
-    suspend fun districts(state: OsmPlace): List<OsmPlace> = withContext(io) {
-        val areaId = areaId(state.osmId)
-        val live = query(
-            """
-            [out:json][timeout:60];
-            area(id:$areaId)->.s;
-            relation(area.s)["boundary"="administrative"]["admin_level"~"^(5|6|7)$"];
-            out tags;
-            """.trimIndent(),
-            defaultLevel = 6,
-        )
-        live.ifEmpty {
-            lastSource = "snapshot"
-            adminSnapshot.districts(state.osmId)
-        }
+    suspend fun searchLocalities(
+        query: String,
+        districtName: String?,
+        stateName: String?,
+    ): List<OsmPlace> = withContext(io) {
+        val q = query.trim()
+        if (q.length < 3) return@withContext emptyList()
+        throttleNominatim()
+
+        val body = runCatching {
+            nominatim.search(q, limit = 20).string()
+        }.getOrNull() ?: return@withContext emptyList()
+
+        LocalitySearch.parse(body, districtName, stateName)
     }
 
-    /** Localities inside a district: named places plus admin_level 8/9/10 areas. */
-    suspend fun localities(district: OsmPlace): List<OsmPlace> = withContext(io) {
-        val areaId = areaId(district.osmId)
+    /** Full enumeration of a district - Overpass, slow, opt-in only. */
+    suspend fun browseLocalitiesOverpass(district: OsmPlace): List<OsmPlace> = withContext(io) {
+        val areaId = AREA_ID_OFFSET + district.osmId
         val places = query(
             """
             [out:json][timeout:60];
@@ -98,39 +71,33 @@ class LocationRepository @Inject constructor(
             """.trimIndent(),
             defaultLevel = 8,
         )
-        val areas = query(
-            """
-            [out:json][timeout:60];
-            area(id:$areaId)->.d;
-            relation(area.d)["boundary"="administrative"]["admin_level"~"^(8|9|10)$"];
-            out tags;
-            """.trimIndent(),
-            defaultLevel = 9,
-        )
-        (places + areas)
-            .distinctBy { it.name.lowercase() }
-            .sortedBy { it.name }
+        places.sortedBy { it.name }
     }
 
-    /**
- * Runs [query] against every Overpass mirror in turn.
- *
- * Public Overpass servers fail transiently very often (504 gateway timeouts), so
- * each endpoint gets several attempts with a short backoff before moving on.
- */
+    private var lastNominatimAt = 0L
+
+    /** Nominatim usage policy: at most 1 request per second. */
+    private suspend fun throttleNominatim() {
+        val now = System.currentTimeMillis()
+        val wait = 1_100L - (now - lastNominatimAt)
+        if (wait > 0) delay(wait)
+        lastNominatimAt = System.currentTimeMillis()
+    }
+
+    /** Overpass fallback, kept only for the explicit "browse all" path. */
     private suspend fun query(
         query: String,
         defaultLevel: Int,
     ): List<OsmPlace> {
         overpassApis.forEachIndexed { index, api ->
             if (index > 0) delay(400)
-            repeat(3) { attempt ->
+            repeat(2) { attempt ->
                 val parsed = runCatching { api.run(query).string() }
                     .mapCatching { parseElements(JSONObject(it), defaultLevel) }
                     .getOrNull()
                     .orEmpty()
                 if (parsed.isNotEmpty()) return parsed
-                if (attempt < 2) delay(1_200L * (attempt + 1))
+                if (attempt == 0) delay(1_000)
             }
         }
         return emptyList()
@@ -153,13 +120,13 @@ class LocationRepository @Inject constructor(
 
     private companion object {
         /** OSM relation ids map to negative area ids via this offset. */
-        fun areaId(relationId: Long): Long = 3_600_000_000L + relationId
+        const val AREA_ID_OFFSET = 3_600_000_000L
     }
 }
 
 /**
- * Geocodes free text with Nominatim (1 req/s, in-memory memo) so distances to
- * Work 1 / Work 2 can be computed for listings that expose no coordinates.
+ * Geocodes free text with Nominatim (1 req/s, in-memory memo) for Work locations
+ * and for locating listings that expose no coordinates.
  */
 @Singleton
 class Geocoder @Inject constructor(
@@ -182,7 +149,7 @@ class Geocoder @Inject constructor(
             lastCallAt = System.currentTimeMillis()
 
             runCatching {
-                val body = nominatim.search(query).string()
+                val body = nominatim.search(query, limit = 1).string()
                 val arr = JSONArray(body)
                 val first = arr.optJSONObject(0) ?: return@runCatching null
                 val lat = first.optString("lat").toDoubleOrNull()

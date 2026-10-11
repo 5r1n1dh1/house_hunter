@@ -44,6 +44,8 @@ class PrefsRepository @Inject constructor(
         val DISTRICT_NAME = stringPreferencesKey("district_name")
         val LOCALITY_ID = stringPreferencesKey("locality_id")
         val LOCALITY_NAME = stringPreferencesKey("locality_name")
+        val LOCALITY_LAT = doublePreferencesKey("locality_lat")
+        val LOCALITY_LNG = doublePreferencesKey("locality_lng")
         val WORK1 = stringPreferencesKey("work1_json")
         val WORK2 = stringPreferencesKey("work2_json")
         val RENT_MIN = doublePreferencesKey("rent_min")
@@ -65,7 +67,10 @@ class PrefsRepository @Inject constructor(
         UserPrefs(
             state = p.place(Keys.STATE_ID, Keys.STATE_NAME, 4),
             district = p.place(Keys.DISTRICT_ID, Keys.DISTRICT_NAME, 6),
-            locality = p.place(Keys.LOCALITY_ID, Keys.LOCALITY_NAME, 8),
+            locality = p.place(Keys.LOCALITY_ID, Keys.LOCALITY_NAME, 8)?.copy(
+                lat = p[Keys.LOCALITY_LAT],
+                lng = p[Keys.LOCALITY_LNG],
+            ),
             work1 = p.work(Keys.WORK1),
             work2 = p.work(Keys.WORK2),
             filters = Filters(
@@ -96,6 +101,7 @@ class PrefsRepository @Inject constructor(
             writePlace(p, Keys.LOCALITY_ID, Keys.LOCALITY_NAME, locality)
             p[Keys.ONBOARDED] = true
         }
+        saveLocality(locality)
     }
 
     suspend fun setWork(index: Int, location: WorkLocation?) {
@@ -182,6 +188,16 @@ class PrefsRepository @Inject constructor(
         } else {
             prefs[idKey] = place.osmId.toString()
             prefs[nameKey] = place.name
+        }
+    }
+
+    /** Locality coordinates come from Nominatim and sharpen all Work distances. */
+    private suspend fun saveLocality(place: OsmPlace?) {
+        context.dataStore.edit { p ->
+            if (place?.lat != null) p[Keys.LOCALITY_LAT] = place.lat
+            else p.remove(Keys.LOCALITY_LAT)
+            if (place?.lng != null) p[Keys.LOCALITY_LNG] = place.lng
+            else p.remove(Keys.LOCALITY_LNG)
         }
     }
 

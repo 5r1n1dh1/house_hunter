@@ -18,7 +18,8 @@ interface NominatimApi {
     suspend fun search(
         @Query("q") query: String,
         @Query("format") format: String = "jsonv2",
-        @Query("limit") limit: Int = 1,
+        @Query("limit") limit: Int = 10,
         @Query("countrycodes") countryCodes: String = "in",
+        @Query("addressdetails") addressDetails: Int = 0,
     ): ResponseBody
 }

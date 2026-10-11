@@ -1,5 +1,6 @@
 package com.househunter.app.ui.preferences
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,17 +8,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +45,6 @@ fun PreferencesScreen(
     viewModel: PreferencesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
-
     var sheet by remember { mutableStateOf<SheetTarget?>(null) }
 
     Scaffold(
@@ -53,8 +58,8 @@ fun PreferencesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "All three lists come from OpenStreetMap (Overpass API)." +
-                    if (state.usingFallback) " Using the bundled OSM snapshot — Overpass is unreachable." else "",
+                text = "States and districts load instantly from a bundled OpenStreetMap " +
+                    "snapshot. Localities are searched live (OpenStreetMap Nominatim).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -62,7 +67,7 @@ fun PreferencesScreen(
             PickerRow(
                 label = "State",
                 value = state.selectedState?.name,
-                enabled = !state.loading,
+                enabled = true,
                 onClick = { sheet = SheetTarget.STATE },
             )
             PickerRow(
@@ -74,7 +79,7 @@ fun PreferencesScreen(
             PickerRow(
                 label = "Locality",
                 value = state.selectedLocality?.name,
-                enabled = state.selectedDistrict != null && !state.loading,
+                enabled = state.selectedDistrict != null,
                 onClick = { sheet = SheetTarget.LOCALITY },
             )
 
@@ -92,7 +97,6 @@ fun PreferencesScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
-                    TextButton(onClick = viewModel::retry) { Text("Retry") }
                 }
             }
 
@@ -100,7 +104,7 @@ fun PreferencesScreen(
 
             Button(
                 onClick = { viewModel.save(onContinue) },
-                enabled = viewModel.canSave && !state.loading,
+                enabled = viewModel.canSave,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Continue")
@@ -114,8 +118,6 @@ fun PreferencesScreen(
             items = state.states,
             label = { it.name },
             isSelected = { it.osmId == state.selectedState?.osmId },
-            manualHint = "State not listed?",
-            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.STATE) },
             onPick = viewModel::selectState,
             onDismiss = { sheet = null },
         )
@@ -125,20 +127,20 @@ fun PreferencesScreen(
             items = state.districts,
             label = { it.name },
             isSelected = { it.osmId == state.selectedDistrict?.osmId },
-            manualHint = "District not listed?",
-            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.DISTRICT) },
             onPick = viewModel::selectDistrict,
             onDismiss = { sheet = null },
         )
 
-        SheetTarget.LOCALITY -> PickerSheet(
-            title = "Select locality",
-            items = state.localities,
-            label = { it.name },
-            isSelected = { it.osmId == state.selectedLocality?.osmId },
-            manualHint = "Locality not listed?",
-            onManual = { viewModel.addManual(it, PreferencesViewModel.Target.LOCALITY) },
+        SheetTarget.LOCALITY -> LocalitySearchSheet(
+            query = state.query,
+            results = state.results,
+            searched = state.searching,
+            browsed = state.browsed,
+            browsing = state.browsing,
+            onQueryChange = viewModel::onQueryChange,
             onPick = viewModel::selectLocality,
+            onUseTyped = { viewModel.addManual(it); sheet = null },
+            onBrowseAll = viewModel::browseAll,
             onDismiss = { sheet = null },
         )
 
@@ -148,43 +150,74 @@ fun PreferencesScreen(
 
 private enum class SheetTarget { STATE, DISTRICT, LOCALITY }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PickerRow(
-    label: String,
-    value: String?,
-    enabled: Boolean,
-    onClick: () -> Unit,
+private fun LocalitySearchSheet(
+    query: String,
+    results: List<OsmPlace>,
+    searched: Boolean,
+    browsed: List<OsmPlace>,
+    browsing: Boolean,
+    onQueryChange: (String) -> Unit,
+    onPick: (OsmPlace) -> Unit,
+    onUseTyped: (String) -> Unit,
+    onBrowseAll: () -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    OutlinedCard(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(label, style = MaterialTheme.typography.labelMedium)
-                Text(
-                    text = value ?: "Select",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = if (value != null) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (value != null) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            Text(
-                text = "▾",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            Text("Select locality", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Type at least 3 letters") },
+                supportingText = { Text("Searches OpenStreetMap — usually under a second") },
             )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Button(onClick = { onUseTyped(query) }, enabled = query.trim().length >= 2) {
+                    Text("Use \"${query.trim()}\"")
+                }
+                TextButton(onClick = onBrowseAll, enabled = !browsing) {
+                    Text(if (browsing) "Loading all…" else "Browse all (slow)")
+                }
+            }
+
+            if (searched) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text("Searching…", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            val shown = results.ifEmpty { browsed }
+            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                items(shown, key = { "${it.osmId}:${it.name}" }) { place ->
+                    Text(
+                        text = place.name,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onPick(place)
+                                onDismiss()
+                            }
+                            .padding(horizontal = 4.dp, vertical = 14.dp),
+                    )
+                }
+            }
         }
     }
 }

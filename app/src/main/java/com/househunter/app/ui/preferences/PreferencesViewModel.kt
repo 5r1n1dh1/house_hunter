@@ -6,6 +6,8 @@ import com.househunter.app.data.prefs.PrefsRepository
 import com.househunter.app.data.repository.LocationRepository
 import com.househunter.app.domain.model.OsmPlace
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,17 +24,23 @@ class PreferencesViewModel @Inject constructor(
     data class UiState(
         val states: List<OsmPlace> = emptyList(),
         val districts: List<OsmPlace> = emptyList(),
-        val localities: List<OsmPlace> = emptyList(),
         val selectedState: OsmPlace? = null,
         val selectedDistrict: OsmPlace? = null,
         val selectedLocality: OsmPlace? = null,
         val loading: Boolean = false,
         val error: String? = null,
-        val usingFallback: Boolean = false,
+        // Locality type-ahead
+        val query: String = "",
+        val results: List<OsmPlace> = emptyList(),
+        val searching: Boolean = false,
+        val browsed: List<OsmPlace> = emptyList(),
+        val browsing: Boolean = false,
     )
 
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+
+    private var searchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -44,31 +52,10 @@ class PreferencesViewModel @Inject constructor(
                     selectedLocality = prefs.locality,
                 )
             }
-            loadStates()
-            prefs.district?.let { loadDistricts(it, select = false) }
-            prefs.locality?.let { loadLocalities(it, select = false) }
+            // Bundled snapshot: instant, no network.
+            _ui.update { it.copy(states = locationRepository.states()) }
+            prefs.state?.let { state -> loadDistricts(state) }
         }
-    }
-
-    private suspend fun loadStates() {
-        _ui.update { it.copy(loading = true, error = null) }
-        val states = locationRepository.states(forceReload = true)
-        _ui.update {
-            it.copy(
-                states = states,
-                loading = false,
-                usingFallback = locationRepository.lastSource == "snapshot",
-                error = if (states.isEmpty()) {
-                    "Could not reach OpenStreetMap. Check your connection and tap Retry."
-                } else {
-                    null
-                },
-            )
-        }
-    }
-
-    fun retry() {
-        viewModelScope.launch { loadStates() }
     }
 
     fun selectState(place: OsmPlace) {
@@ -78,27 +65,23 @@ class PreferencesViewModel @Inject constructor(
                 selectedDistrict = null,
                 selectedLocality = null,
                 districts = emptyList(),
-                localities = emptyList(),
+                results = emptyList(),
+                browsed = emptyList(),
+                query = "",
                 error = null,
             )
         }
-        viewModelScope.launch { loadDistricts(place, select = true) }
+        viewModelScope.launch { loadDistricts(place) }
     }
 
-    private suspend fun loadDistricts(state: OsmPlace, select: Boolean) {
+    private suspend fun loadDistricts(state: OsmPlace) {
         _ui.update { it.copy(loading = true) }
         val districts = locationRepository.districts(state)
         _ui.update {
             it.copy(
                 districts = districts,
                 loading = false,
-                usingFallback = it.usingFallback || locationRepository.lastSource == "snapshot",
-                selectedDistrict = if (select) null else it.selectedDistrict,
-                error = if (districts.isEmpty()) {
-                    "Could not load districts for ${state.name}. Type the district below."
-                } else {
-                    null
-                },
+                error = if (districts.isEmpty()) "No districts bundled for ${state.name}." else null,
             )
         }
     }
@@ -108,47 +91,63 @@ class PreferencesViewModel @Inject constructor(
             it.copy(
                 selectedDistrict = place,
                 selectedLocality = null,
-                localities = emptyList(),
+                results = emptyList(),
+                browsed = emptyList(),
+                query = "",
                 error = null,
-            )
-        }
-        viewModelScope.launch { loadLocalities(place, select = true) }
-    }
-
-    private suspend fun loadLocalities(district: OsmPlace, select: Boolean) {
-        _ui.update { it.copy(loading = true) }
-        val localities = locationRepository.localities(district)
-        _ui.update {
-            it.copy(
-                localities = localities,
-                loading = false,
-                selectedLocality = if (select) null else it.selectedLocality,
-                error = if (localities.isEmpty()) {
-                    "No localities from OpenStreetMap for ${district.name} — type it below."
-                } else {
-                    null
-                },
             )
         }
     }
 
     fun selectLocality(place: OsmPlace) {
-        _ui.update { it.copy(selectedLocality = place, error = null) }
+        _ui.update { it.copy(selectedLocality = place, query = "", results = emptyList()) }
+    }
+
+    /** Debounced Nominatim type-ahead (free, no key, ~1 s per request). */
+    fun onQueryChange(value: String) {
+        _ui.update { it.copy(query = value) }
+        searchJob?.cancel()
+        if (value.trim().length < 3) {
+            _ui.update { it.copy(results = emptyList(), searching = false) }
+            return
+        }
+        searchJob = viewModelScope.launch {
+            delay(400)
+            _ui.update { it.copy(searching = true) }
+            val results = locationRepository.searchLocalities(
+                query = value,
+                districtName = _ui.value.selectedDistrict?.name,
+                stateName = _ui.value.selectedState?.name,
+            )
+            _ui.update { it.copy(results = results, searching = false) }
+        }
+    }
+
+    /** Explicit "browse everything" - Overpass, slow by nature. */
+    fun browseAll() {
+        val district = _ui.value.selectedDistrict ?: return
+        viewModelScope.launch {
+            _ui.update { it.copy(browsing = true) }
+            val places = locationRepository.browseLocalitiesOverpass(district)
+            _ui.update { it.copy(browsed = places, browsing = false) }
+        }
     }
 
     /** Manual entry: a stable synthetic id keeps the value usable downstream. */
-    fun addManual(name: String, target: Target) {
+    fun addManual(name: String) {
         val trimmed = name.trim()
         if (trimmed.length < 2) return
-        val place = OsmPlace(syntheticId(trimmed), trimmed, when (target) {
-            Target.STATE -> 4
-            Target.DISTRICT -> 6
-            Target.LOCALITY -> 8
-        })
-        when (target) {
-            Target.STATE -> selectState(place)
-            Target.DISTRICT -> selectDistrict(place)
-            Target.LOCALITY -> selectLocality(place)
+        val state = _ui.value
+        val district = state.selectedDistrict
+        selectLocality(
+            OsmPlace(
+                osmId = syntheticId(trimmed),
+                name = trimmed,
+                adminLevel = 8,
+            ),
+        )
+        if (district != null) {
+            _ui.update { it.copy(query = trimmed, results = emptyList(), browsed = emptyList()) }
         }
     }
 
@@ -168,8 +167,6 @@ class PreferencesViewModel @Inject constructor(
             onSaved()
         }
     }
-
-    enum class Target { STATE, DISTRICT, LOCALITY }
 
     val canSave: Boolean
         get() = _ui.value.selectedState != null && _ui.value.selectedLocality != null

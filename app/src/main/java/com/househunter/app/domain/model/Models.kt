@@ -1,10 +1,15 @@
 package com.househunter.app.domain.model
 
-/** A place returned by Overpass / geocoding (state, district or locality). */
+/**
+ * A place used by the dropdowns: an OSM state/district relation, or a locality
+ * resolved through geocoding (which also yields real coordinates).
+ */
 data class OsmPlace(
     val osmId: Long,
     val name: String,
     val adminLevel: Int,
+    val lat: Double? = null,
+    val lng: Double? = null,
 )
 
 data class WorkLocation(

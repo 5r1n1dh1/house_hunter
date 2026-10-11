@@ -100,16 +100,25 @@ class ListingRepository @Inject constructor(
         }
     }
 
-    /** Most sites expose no coordinates: fall back to the locality centroid. */
+    /** Most sites expose no coordinates: fall back to the selected locality centroid. */
     private suspend fun attachFallbackCoordinates(listings: List<Listing>, prefs: UserPrefs): List<Listing> {
         val missing = listings.any { it.lat == null || it.lng == null }
         if (!missing) return listings
-        val query = listOfNotNull(
-            prefs.locality?.name,
-            prefs.district?.name,
-            prefs.state?.name,
-        ).joinToString(", ").takeIf { it.isNotBlank() } ?: return listings
-        val point = geocoder.geocode(query) ?: return listings
+
+        // The locality picked in onboarding already carries real Nominatim coordinates.
+        val locality = prefs.locality
+        val point = when {
+            locality?.lat != null && locality.lng != null -> locality.lat to locality.lng
+            else -> {
+                val query = listOfNotNull(
+                    prefs.locality?.name,
+                    prefs.district?.name,
+                    prefs.state?.name,
+                ).joinToString(", ").takeIf { it.isNotBlank() } ?: return listings
+                geocoder.geocode(query) ?: return listings
+            }
+        }
+
         return listings.map { listing ->
             if (listing.lat != null && listing.lng != null) listing
             else listing.copy(lat = point.first, lng = point.second)
