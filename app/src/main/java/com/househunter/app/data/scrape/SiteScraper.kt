@@ -39,7 +39,7 @@ class SiteScraper @Inject constructor(
         // The dropdown yields OSM districts, which carry a cardinal suffix ("Bengaluru
         // North"). Property sites address the city without it, and "bengaluru-north"
         // matches nothing on their side, so {CITY_NAME} strips it.
-        val cityName = district.substringBefore(REGION_SUFFIX).ifBlank { district }
+        val cityName = REGION_SUFFIX.replace(district, "").trim().ifBlank { district }
         return config.searchUrlTemplate
             .replace("{STATE}", enc(state))
             .replace("{STATE_SLUG}", enc(slug(state)))
