@@ -64,7 +64,7 @@ fun WorkMapScreen(
     onDone: () -> Unit,
     viewModel: WorkMapViewModel = hiltViewModel(),
 ) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.ui.collectAsStateWithLifecycle()
     val editingLabel = if (state.activeTarget == 0) "Work 1" else "Work 2"
 
     Scaffold(
