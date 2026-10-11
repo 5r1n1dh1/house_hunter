@@ -45,16 +45,28 @@ class PreferencesViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val prefs = prefsRepository.current()
+
+            // Bundled snapshot: instant, no network.
+            val allStates = locationRepository.states()
+            _ui.update { it.copy(states = allStates) }
+
+            val state = prefs.state
+                ?: allStates.firstOrNull { it.osmId == DEFAULT_STATE_ID }
+                ?: allStates.firstOrNull { it.name.equals(DEFAULT_STATE_NAME, ignoreCase = true) }
+
+            val districts = state?.let { locationRepository.districts(it) }.orEmpty()
+            val district = prefs.district
+                ?: districts.firstOrNull { it.osmId == DEFAULT_DISTRICT_ID }
+                ?: districts.firstOrNull { it.name.equals(DEFAULT_DISTRICT_NAME, ignoreCase = true) }
+
             _ui.update {
                 it.copy(
-                    selectedState = prefs.state,
-                    selectedDistrict = prefs.district,
+                    selectedState = state,
+                    selectedDistrict = district,
                     selectedLocality = prefs.locality,
+                    districts = districts,
                 )
             }
-            // Bundled snapshot: instant, no network.
-            _ui.update { it.copy(states = locationRepository.states()) }
-            prefs.state?.let { state -> loadDistricts(state) }
         }
     }
 
@@ -170,4 +182,12 @@ class PreferencesViewModel @Inject constructor(
 
     val canSave: Boolean
         get() = _ui.value.selectedState != null && _ui.value.selectedLocality != null
+
+    private companion object {
+        /** Preselected defaults so onboarding starts on a usable location. */
+        const val DEFAULT_STATE_ID = 2019939L      // Karnataka
+        const val DEFAULT_STATE_NAME = "Karnataka"
+        const val DEFAULT_DISTRICT_ID = 2020589L    // Bengaluru Urban
+        const val DEFAULT_DISTRICT_NAME = "Bengaluru Urban"
+    }
 }
