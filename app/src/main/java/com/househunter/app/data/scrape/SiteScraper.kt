@@ -53,7 +53,7 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
 
             var found = 0
             cards.forEach { card ->
-                parseCard(card, config, prefs)?.let {
+                parseCard(card, config, prefs, url)?.let {
                     listings += it
                     found++
                 }
@@ -105,21 +105,38 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
         )
     }
 
-    private fun parseCard(card: Element, config: SiteConfig, prefs: UserPrefs): Listing? {
+    /**
+     * Parses one result card.
+     *
+     * Price/title/image fall back to the card's **schema.org JSON-LD** block, which
+     * many sites (MagicBricks, Stanza, ...) render server-side even when the visible
+     * price is injected by JavaScript. Without this, modern sites look "empty".
+     * When a card exposes no link, the page URL is used so "open original listing"
+     * always has somewhere to go.
+     */
+    private fun parseCard(
+        card: Element,
+        config: SiteConfig,
+        prefs: UserPrefs,
+        pageUrl: String,
+    ): Listing? {
         val selectors = config.selectors
+        val jsonLd = JsonLd.from(card)
 
         val detailUrl = Normalizer.resolveUrl(
             baseUrl = config.baseUrl,
-            href = selectors.detailUrl?.let { text(card, it) },
-        ) ?: return null
+            href = selectors.detailUrl?.let { text(card, it) ?: attr(card, it) },
+        ) ?: pageUrl
 
-        val rawTitle = selectors.title.let { text(card, it) }
+        val rawTitle = selectors.title.let { text(card, it) } ?: jsonLd.name
         val rawPrice = selectors.price.let { text(card, it) }
-        val rent = Normalizer.parseRent(rawPrice) ?: return null
+        val rent = Normalizer.parseRent(rawPrice)
+            ?: jsonLd.price
+            ?: return null
         val title = rawTitle?.takeIf { it.isNotBlank() } ?: "Rental listing"
 
         return Listing(
-            id = listingId(config.id, detailUrl),
+            id = listingId(config.id, detailUrl + "|" + (jsonLd.name ?: title)),
             siteId = config.id,
             siteName = config.name,
             title = title,
@@ -128,7 +145,7 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
             maintenance = null,
             bhk = Normalizer.parseBhk(selectors.bhk?.let { text(card, it) } ?: card.text()),
             areaSqft = Normalizer.parseAreaSqft(selectors.areaSqft?.let { text(card, it) } ?: card.text()),
-            furnishing = null,
+            furnishing = selectors.furnishing?.let { text(card, it) },
             propertyType = null,
             amenities = emptyList(),
             locality = selectors.location?.let { text(card, it) } ?: prefs.locality?.name.orEmpty(),
@@ -136,11 +153,21 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
             state = prefs.state?.name.orEmpty(),
             lat = null,
             lng = null,
-            images = listOfNotNull(selectors.imageUrl?.let { text(card, it) }
-                ?.let { Normalizer.resolveUrl(config.baseUrl, it) }),
+            images = listOfNotNull(
+                selectors.imageUrl?.let { text(card, it) ?: attr(card, it) }
+                    ?.let { Normalizer.resolveUrl(config.baseUrl, it) }
+                    ?: jsonLd.image,
+            ),
             phone = Normalizer.sanitizePhone(selectors.phone?.let { text(card, it) }),
             detailUrl = detailUrl,
+            description = jsonLd.description,
         )
+    }
+
+    private fun attr(card: Element, selector: String): String? {
+        if (selector.isBlank()) return null
+        val element = runCatching { card.selectFirst(selector) }.getOrNull() ?: return null
+        return runCatching { element.attr("href") }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun text(card: Element, selector: String): String? {

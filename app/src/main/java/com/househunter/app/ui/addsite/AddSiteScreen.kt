@@ -81,15 +81,21 @@ fun AddSiteScreen(
             Field("Title", state.titleSelector, "h2.title") { v ->
                 viewModel.update { it.copy(titleSelector = v) }
             }
-            Field("Price", state.priceSelector, "span.price") { v ->
+            Field("Price (optional)", state.priceSelector, "span.price") { v ->
                 viewModel.update { it.copy(priceSelector = v) }
             }
-            Field("Detail link", state.detailUrlSelector, "a.details-link") { v ->
+            Field("Detail link (optional)", state.detailUrlSelector, "a.details-link") { v ->
                 viewModel.update { it.copy(detailUrlSelector = v) }
             }
             Field("Image (optional)", state.imageSelector, "img.src") { v ->
                 viewModel.update { it.copy(imageSelector = v) }
             }
+            Text(
+                text = "Leave price empty if the site hides it behind JavaScript — the app also reads " +
+                    "schema.org JSON-LD price data, which MagicBricks-style sites provide.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Field("Max pages", state.maxPages) { v -> viewModel.update { it.copy(maxPages = v) } }
             Field("Seconds between requests", state.rateLimitSeconds) { v ->
                 viewModel.update { it.copy(rateLimitSeconds = v) }

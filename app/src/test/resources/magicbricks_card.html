@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<!--
+  Test-scoped fixture (src/test/resources) - never packaged in the APK.
+  Mirrors the real MagicBricks card markup: visible price is EMPTY (client-side
+  rendered) while the real price lives in the card's schema.org JSON-LD.
+-->
+<html lang="en">
+<body>
+  <div class="mb-srp__list" id="cardid86845275">
+    <div class="mb-srp__card">
+      <div class="mb-srp__card__container">
+        <div class="mb-srp__card__photo">
+          <div class="mb-srp__card__photo__fig">
+            <span class="mb-srp__card__photo__fig--count">13<span class="sign-plus">+</span> Photos</span>
+            <img src="https://img.staticmb.com/mbphoto/property/h300_w450/86845275_1.jpg" class="mb-srp__card__photo__fig--graphic zoom"/>
+            <div class="mb-srp__card__photo__fig--post">Updated yesterday</div>
+          </div>
+        </div>
+        <div class="mb-srp__card__info">
+          <h2 class="mb-srp__card--title">3 BHK Apartment for Rent in Sahakara Nagar Bangalore</h2>
+          <div class="mb-srp__card__price"><div class="mb-srp__card__price--amount"></div></div>
+          <div class="mb-srp__card__summary">
+            <div class="mb-srp__card__summary__list--item" data-summary="furnishing">
+              <div class="mb-srp__card__summary--label">Furnishing</div>
+              <div class="mb-srp__card__summary--value">Semi-Furnished</div>
+            </div>
+            <div class="mb-srp__card__summary__list--item" data-summary="carpet-area">
+              <div class="mb-srp__card__summary--label">Carpet Area</div>
+              <div class="mb-srp__card__summary--value">1850 sqft</div>
+            </div>
+          </div>
+          <script type="application/ld+json">
+            {"@context":"https://schema.org","@type":"RentAction","startTime":"2026-10-09T03:45:09.000Z","landlord":{"@type":"Person","name":"Rakshitha"},"object":{"@type":"Residence","name":"3 BHK Apartment for Rent in Sahakara Nagar Bangalore 1850 Sqft"},"priceSpecification":{"@type":"PriceSpecification","price":45000,"priceCurrency":"INR"}}
+          </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -39,8 +39,7 @@ class AddSiteViewModel @Inject constructor(
     ) {
         val valid: Boolean
             get() = name.isNotBlank() && baseUrl.isNotBlank() && searchUrlTemplate.contains("{LOCALITY}") &&
-                listContainer.isNotBlank() && titleSelector.isNotBlank() &&
-                priceSelector.isNotBlank() && detailUrlSelector.isNotBlank()
+                listContainer.isNotBlank() && titleSelector.isNotBlank()
     }
 
     private val _ui = MutableStateFlow(UiState())

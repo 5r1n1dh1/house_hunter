@@ -14,6 +14,7 @@ data class SelectorSet(
     val detailUrl: String? = null,
     val phone: String? = null,
     val postedDate: String? = null,
+    val furnishing: String? = null,
 )
 
 /** Regexes (capture group 1) applied to the detail page. */
@@ -62,6 +63,7 @@ data class SiteConfig(
             selectors.detailUrl?.let { put("detailUrl", it) }
             selectors.phone?.let { put("phone", it) }
             selectors.postedDate?.let { put("postedDate", it) }
+            selectors.furnishing?.let { put("furnishing", it) }
         })
         put("detailFields", JSONObject().apply {
             detailFields.description?.let { put("description", it) }
@@ -105,6 +107,7 @@ data class SiteConfig(
                         detailUrl = s.optStringOrNull("detailUrl"),
                         phone = s.optStringOrNull("phone"),
                         postedDate = s.optStringOrNull("postedDate"),
+                        furnishing = s.optStringOrNull("furnishing"),
                     ),
                     detailFields = DetailFields(
                         description = d?.optStringOrNull("description"),

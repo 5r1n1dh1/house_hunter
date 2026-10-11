@@ -59,11 +59,21 @@ class PreferencesViewModel @Inject constructor(
                 ?: districts.firstOrNull { it.osmId == DEFAULT_DISTRICT_ID }
                 ?: districts.firstOrNull { it.name.equals(DEFAULT_DISTRICT_NAME, ignoreCase = true) }
 
+            // A default locality means the app shows real listings on first launch.
+            val locality = prefs.locality
+                ?: OsmPlace(
+                    osmId = DEFAULT_LOCALITY_ID,
+                    name = DEFAULT_LOCALITY_NAME,
+                    adminLevel = 8,
+                    lat = DEFAULT_LOCALITY_LAT,
+                    lng = DEFAULT_LOCALITY_LNG,
+                )
+
             _ui.update {
                 it.copy(
                     selectedState = state,
                     selectedDistrict = district,
-                    selectedLocality = prefs.locality,
+                    selectedLocality = locality,
                     districts = districts,
                 )
             }
@@ -185,9 +195,13 @@ class PreferencesViewModel @Inject constructor(
 
     private companion object {
         /** Preselected defaults so onboarding starts on a usable location. */
-        const val DEFAULT_STATE_ID = 2019939L      // Karnataka
+        const val DEFAULT_STATE_ID = 2019939L       // Karnataka
         const val DEFAULT_STATE_NAME = "Karnataka"
-        const val DEFAULT_DISTRICT_ID = 2020589L    // Bengaluru Urban
-        const val DEFAULT_DISTRICT_NAME = "Bengaluru Urban"
+        const val DEFAULT_DISTRICT_ID = 2020588L     // Bengaluru North
+        const val DEFAULT_DISTRICT_NAME = "Bengaluru North"
+        const val DEFAULT_LOCALITY_ID = 5_5243_0276L // Sahakara Nagar (OSM way)
+        const val DEFAULT_LOCALITY_NAME = "Sahakara Nagar"
+        const val DEFAULT_LOCALITY_LAT = 13.0621
+        const val DEFAULT_LOCALITY_LNG = 77.5801
     }
 }

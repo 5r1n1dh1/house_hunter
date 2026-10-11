@@ -1,5 +1,27 @@
 [
   {
+    "id": "magicbricks",
+    "name": "MagicBricks",
+    "baseUrl": "https://www.magicbricks.com",
+    "searchUrlTemplate": "https://www.magicbricks.com/property-for-rent-in-{LOCALITY_SLUG}-bangalore-pppfr",
+    "selectors": {
+      "listContainer": "div.mb-srp__list",
+      "title": "h2.mb-srp__card--title",
+      "price": "div.mb-srp__card__price--amount",
+      "areaSqft": "[data-summary='carpet-area'] div.mb-srp__card__summary--value",
+      "furnishing": "[data-summary='furnishing'] div.mb-srp__card__summary--value",
+      "imageUrl": "img.mb-srp__card__photo__fig--graphic",
+      "postedDate": "div.mb-srp__card__photo__fig--post"
+    },
+    "pagination": {
+      "maxPages": 1
+    },
+    "rateLimitSeconds": 8,
+    "enabled": true,
+    "requiresManual": false,
+    "note": "Primary source. Prices come from the schema.org JSON-LD each card embeds. The city slug is hardcoded to 'bangalore'; enable other sites for wider coverage."
+  },
+  {
     "id": "nobroker",
     "name": "NoBroker",
     "baseUrl": "https://www.nobroker.in",
@@ -12,11 +34,13 @@
       "imageUrl": "img",
       "detailUrl": "a[href*='property']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Anti-bot protection: if this returns 0 results, open the site in a browser, copy the search URL and set your own selectors."
+    "note": "Returns 403/404 to automated requests from most networks. If it works on your connection, enable and test the selectors."
   },
   {
     "id": "nobrokerage",
@@ -31,11 +55,13 @@
       "imageUrl": "img",
       "detailUrl": "a[href*='property']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Verify selectors with Test fetch; adjust them if the card layout changed."
+    "note": "Returns 404 on all search paths. Likely retired - keep for reference."
   },
   {
     "id": "nestriqo",
@@ -50,11 +76,13 @@
       "imageUrl": "img.property-image",
       "detailUrl": "a.property-link"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Confirm the search URL pattern with Test fetch."
+    "note": "Site is live but all search paths 404. Likely retired."
   },
   {
     "id": "razorent",
@@ -69,11 +97,13 @@
       "imageUrl": "img",
       "detailUrl": "a[href*='property']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Confirm selectors with Test fetch."
+    "note": "Site is live but search pages return no listings. Manual only."
   },
   {
     "id": "rentmystay",
@@ -88,30 +118,13 @@
       "imageUrl": "img",
       "detailUrl": "a"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Confirm selectors with Test fetch."
-  },
-  {
-    "id": "magicbricks",
-    "name": "MagicBricks",
-    "baseUrl": "https://www.magicbricks.com",
-    "searchUrlTemplate": "https://www.magicbricks.com/property-for-rent/residential-real-estate/?bedroom={LOCALITY}",
-    "selectors": {
-      "listContainer": "div.mb-srp__card, div.SRCard",
-      "title": "h2.mb-srp__card--title, h2",
-      "price": "div.mb-srp__card__price--amount, span",
-      "location": "div.mb-srp__card__address, div.SRCard__address",
-      "imageUrl": "img",
-      "detailUrl": "a.mb-srp__card__link, a[href*='property']"
-    },
-    "pagination": { "maxPages": 2 },
-    "rateLimitSeconds": 10,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "Heavy anti-bot. Prefer the official partner API when available."
+    "note": "Search endpoint returns HTTP 500. Manual only."
   },
   {
     "id": "99acres",
@@ -126,11 +139,13 @@
       "imageUrl": "img",
       "detailUrl": "a[href*='property']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 10,
     "enabled": false,
     "requiresManual": true,
-    "note": "Heavy anti-bot. Verify selectors; respect rate limits."
+    "note": "Cloudflare: every request from this network returns 403. Manual only."
   },
   {
     "id": "housing",
@@ -145,11 +160,13 @@
       "imageUrl": "img",
       "detailUrl": "a[href*='/rent/']"
     },
-    "pagination": { "maxPages": 2 },
+    "pagination": {
+      "maxPages": 2
+    },
     "rateLimitSeconds": 12,
     "enabled": false,
     "requiresManual": true,
-    "note": "Likely JS-rendered; treat as manual until verified."
+    "note": "Answers 406 Not Acceptable to bots. Manual only."
   },
   {
     "id": "nestaway",
@@ -162,11 +179,13 @@
       "price": "span.price",
       "detailUrl": "a"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Service folded into Urban Company; URL may redirect or be dead."
+    "note": "Service folded into Urban Company; dead source."
   },
   {
     "id": "bengalururent",
@@ -181,11 +200,13 @@
       "imageUrl": "img",
       "detailUrl": "a"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Bengaluru only."
+    "note": "Bengaluru only. Verify selectors with Test fetch."
   },
   {
     "id": "olx",
@@ -198,11 +219,13 @@
       "price": "span[data-cy='search-card-price']",
       "detailUrl": "a[data-cy='ad-title']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 12,
     "enabled": false,
     "requiresManual": true,
-    "note": "JS-rendered + anti-bot; manual selectors required."
+    "note": "JS-rendered + anti-bot (connection refused from this network). Manual only."
   },
   {
     "id": "facebook",
@@ -215,10 +238,12 @@
       "price": "span",
       "detailUrl": "a[href*='/posts/']"
     },
-    "pagination": { "maxPages": 1 },
+    "pagination": {
+      "maxPages": 1
+    },
     "rateLimitSeconds": 15,
     "enabled": false,
     "requiresManual": true,
-    "note": "Requires login: not scrapable. Copy listings manually into the app instead."
+    "note": "Requires login: not scrapable. Copy listings manually instead."
   }
 ]
