@@ -9,6 +9,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.webkit.CookieManager
+import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -302,7 +303,7 @@ class WebViewFetcher @Inject constructor(
             view: WebView,
             message: String,
             defaultValue: String,
-            result: JsResult,
+            result: JsPromptResult,
         ): Boolean {
             result.cancel()
             return true

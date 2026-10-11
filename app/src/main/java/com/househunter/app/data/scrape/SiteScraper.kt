@@ -123,14 +123,18 @@ class SiteScraper @Inject constructor(
      */
     private suspend fun scrapeSitemap(config: SiteConfig, prefs: UserPrefs): List<Listing> {
         val indexUrl = config.sitemapIndexUrl ?: return emptyList()
-        val source = SitemapSource { url -> fetchPage(config, url) }
-
         val indexXml = fetchPage(config, indexUrl) ?: return emptyList()
+
+        // All I/O happens here in the suspend context; the parser then works over a
+        // plain map, because SitemapSource's fetcher is a non-suspending lambda.
+        val downloaded = HashMap<String, String>()
+        val source = SitemapSource { url -> downloaded[url] }
         val targets = LinkedHashSet<String>(source.urls(indexXml))
-        // A plain loop rather than forEach: fetchPage is a suspend function.
         for (mapUrl in source.discoverSitemaps(indexXml)) {
             val mapXml = fetchPage(config, mapUrl)
-            if (!mapXml.isNullOrBlank()) targets += source.urls(mapXml)
+            if (mapXml.isNullOrBlank()) continue
+            downloaded[mapUrl] = mapXml
+            targets += source.urls(mapXml)
         }
         if (targets.isEmpty()) return emptyList()
 
