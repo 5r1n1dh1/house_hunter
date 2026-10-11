@@ -1,7 +1,10 @@
 package com.househunter.app
 
+import com.househunter.app.data.remote.HttpFetcher
 import com.househunter.app.data.scrape.EmbeddedJson
 import com.househunter.app.data.scrape.Normalizer
+import com.househunter.app.data.scrape.firstDouble
+import com.househunter.app.data.scrape.firstString
 import com.househunter.app.data.scrape.SelectorSet
 import com.househunter.app.data.scrape.SiteConfig
 import com.househunter.app.data.scrape.SiteScraper
@@ -197,7 +200,8 @@ class CityUrlTemplatingTest {
         selectors = SelectorSet(listContainer = "div", title = "h1", price = "span"),
     )
 
-    private fun build(template: String) = SiteScraper().buildUrl(config(template), prefs)
+    private fun build(template: String) =
+        SiteScraper(HttpFetcher(okhttp3.OkHttpClient())).buildUrl(config(template), prefs)
 
     @Test
     fun cityNameDropsTheCardinalSuffix() {
