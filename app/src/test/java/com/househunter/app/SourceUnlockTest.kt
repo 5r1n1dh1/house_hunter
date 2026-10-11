@@ -66,7 +66,7 @@ class SourceUnlockTest {
         // Real URL: ...-2-bhk-...-hsr-layout-bangalore-south-1340-sqft-spid-R92072850
         val url = "https://www.99acres.com/2-bhk-bedroom-apartment-flat-for-rent-in-purva-" +
             "vantage-sector-2-hsr-layout-bangalore-south-1340-sqft-spid-R92072850"
-        assertEquals(2, Normalizer.parseBhk(url))
+        assertEquals(2, Normalizer.parseBhk(url) ?: -1)
         assertEquals(1340.0, Normalizer.parseAreaSqft(url)!!, 0.01)
         assertTrue(url.contains("spid-"))
     }

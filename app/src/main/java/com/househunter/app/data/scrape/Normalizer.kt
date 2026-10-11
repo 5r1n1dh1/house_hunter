@@ -69,7 +69,7 @@ object Normalizer {
     fun parseAreaSqft(text: String?): Double? {
         if (text.isNullOrBlank()) return null
         val cleaned = text.replace(",", "")
-        val sqft = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*sq").find(cleaned)
+        val sqft = Regex("(?i)([0-9]+(?:\\.[0-9]+)?)[\\s_-]*sq").find(cleaned)
         if (sqft != null) return sqft.groupValues[1].toDoubleOrNull()
         val match = Regex("([0-9]{2,6})").find(cleaned) ?: return null
         return match.groupValues[1].toDoubleOrNull()
