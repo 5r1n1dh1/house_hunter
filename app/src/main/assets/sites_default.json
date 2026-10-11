@@ -63,13 +63,13 @@
     "searchUrlTemplate": "https://www.99acres.com/property-for-rent-in-{CITY}-ffid",
     "mode": "cards",
     "selectors": {
-      "listContainer": "div.tupleNew__tupleWrap",
-      "title": "h2.tupleNew__propType",
-      "price": "div.tupleNew__priceValWrap",
-      "areaSqft": "div.tupleNew__areaType",
+      "listContainer": "div[class*='tupleNew__tupleWrap']",
+      "title": "h2[class*='tupleNew__propType']",
+      "price": "div[class*='tupleNew__priceValWrap']",
+      "areaSqft": "div[class*='tupleNew__areaType']",
       "detailUrl": "a[href*='spid-']",
-      "ownerTag": "div.tupleNew__pbL1",
-      "imageUrl": "div.tupleNew__imgWrap img"
+      "ownerTag": "div[class*='tupleNew__pbL1']",
+      "ownerName": "div[class*='tupleNew__pbL2']"
     },
     "localityFilter": true,
     "pagination": {
@@ -80,7 +80,7 @@
     "requiresManual": false,
     "engine": "http",
     "searchUrlFallback": "https://www.99acres.com/property-for-rent-in-bangalore-ffid",
-    "note": "City-wide page (no locality URL); results are narrowed to your locality on device. Needs browser-shaped request headers - it answers 403 without them."
+    "note": "City-wide page (no locality URL); results are narrowed to your locality on device. Needs browser-shaped request headers - it answers 403 without them. Photos are lazy-loaded and absent from the server markup, so these cards show a placeholder image."
   },
   {
     "id": "stanza",

@@ -362,11 +362,17 @@ class SiteScraper @Inject constructor(
      * node, so splitting it yields both the role and the name in one request.
      */
     private fun ownerTag(card: Element, config: SiteConfig): Pair<String?, String?>? {
-        val raw = config.selectors.ownerTag?.let { text(card, it) } ?: return null
-        val parts = raw.split(":", limit = 2).map { it.trim() }
-        val role = parts.getOrNull(0)?.takeIf { it.isNotEmpty() && it.length <= 12 }
-        val name = parts.getOrNull(1)?.takeIf { it.isNotEmpty() }
-        return role to name
+        val roleText = config.selectors.ownerTag?.let { text(card, it) }
+        val nameText = config.selectors.ownerName?.let { text(card, it) }
+        if (roleText.isNullOrBlank() && nameText.isNullOrBlank()) return null
+
+        // Some sites put both in one node ("Owner: Name"), 99acres splits them
+        // (pbL1 = "Dealer", pbL2 = the dealer's name).
+        val combined = roleText?.split(":", limit = 2)?.map { it.trim() }
+        val role = combined?.getOrNull(0)
+            ?: roleText?.trim()?.takeIf { it.length <= 12 }
+        val name = combined?.getOrNull(1) ?: nameText?.trim()
+        return role?.takeIf { it.isNotEmpty() } to name?.takeIf { it.isNotEmpty() }
     }
 
     private fun attr(card: Element, selector: String): String? {
