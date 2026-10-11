@@ -47,17 +47,27 @@ object LocalitySearch {
     }
 
     /**
-     * Loose containment so naming differences still match, e.g. OSM district
-     * "Bengaluru Urban" vs Nominatim display "... Bangalore South ...".
+     * Loose-but-strict containment: **every** significant word of [needle] must
+     * appear in [haystack], with "Bengaluru"/"Bangalore" treated as aliases.
+     *
+     * Requiring all words matters: with a looser rule "Bengaluru Urban" matched
+     * Nominatim's "Bangalore South", which is a different district.
      */
     private fun matches(haystack: String, needle: String): Boolean {
         if (haystack.contains(needle)) return true
-        val words = needle.split(' ', '-').filter { it.length >= 4 }
+
+        val words = needle.split(' ', '-')
+            .map { it.trim().removeSuffix("district").trim() }
+            .filter { it.length >= 4 }
         if (words.isEmpty()) return false
-        return words.any { word ->
-            if (word.startsWith("bangalore")) haystack.contains("bengaluru")
-            else if (word.startsWith("bengaluru")) haystack.contains("bangalore")
-            else haystack.contains(word.removeSuffix(" district"))
+
+        return words.all { word ->
+            when {
+                haystack.contains(word) -> true
+                word.startsWith("bangalore") -> haystack.contains("bengaluru")
+                word.startsWith("bengaluru") -> haystack.contains("bangalore")
+                else -> false
+            }
         }
     }
 }
