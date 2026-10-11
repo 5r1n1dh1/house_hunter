@@ -556,30 +556,45 @@ then `base64 -w0 househunter.jks`).
 
 ## Implementation Status
 
-All 11 milestones are implemented; CI run **#38067185303** is green and produces a
-signed release APK (`v2` + `v3` signature schemes, ~2.1 MB).
+CI is green (run `38128017797`: unit tests + lint + signed release APK) and
+**54 real listings are validated for Sahakara Nagar** via
+`python3 tools/validate_sources.py sahakara-nagar` (24 NoBroker + 30 MagicBricks).
 
-Delivered as planned: Overpass cascading dropdowns, Google Maps work-location
-pickers with a Work 1 / Work 2 distance banner on the details screen, config-driven
-`SiteScraper` + Sites screen + add-site form with real test-fetch, card list with
-price + 4 icon actions (call / map / photos / open in browser), detail screen with
-two-phase detail fetch, sort + filters, zero caching, and the free-tier CI pipeline.
+### Working sources (all validated against live data)
 
-### Deviations from the plan (and why)
+| Site | Mode | Engine | Verified for Sahakara Nagar |
+|------|------|--------|------------------------------|
+| NoBroker | embedded JSON | HTTP | 24 listings, Rs 8k-4L, 24/24 images + detail URLs |
+| MagicBricks | CSS cards + JSON-LD | HTTP | 30 listings, Rs 16k-2L |
+| Stanza Living | sitemap + JSON-LD | HTTP | 6 Bengaluru residences (no Sahakara coverage, falls back to city-wide) |
+| 99acres / housing.com / OLX | CSS cards | **WebView** | blocked to plain HTTP clients; real-browser engine wired, ships disabled |
+
+Key discovery: all three sources hide prices behind JavaScript, so DOM scraping
+returns nothing. The data lives in **embedded JSON** (NoBroker) and **schema.org
+JSON-LD** (MagicBricks, Stanza) - that is what made them usable.
+
+### Bug fixes proven against real data
+
+- **Rs 1/mo, 2/mo cards** - a price selector matched a floor/bedroom count.
+  `Normalizer.parseRent` now prefers the currency-marked number and rejects
+  anything outside Rs 500 - 1 crore.
+- **No photos** - NoBroker returns protocol-relative URLs (`//assets.nobroker.in/...`)
+  and the image CDNs 403 referer-less requests. Fixed by `ImageUrl.normalize` plus
+  a Coil loader that sends `Referer` (and still keeps disk caching off).
+
+### Deviations from the plan
 
 | Plan | Implementation | Reason |
 |------|----------------|--------|
-| Google Places Autocomplete for work search | **Nominatim** search + map marker | Places needs a billing-enabled key; Nominatim is free. Keeps the app usable with no Google key at all. |
-| `gradle-wrapper.jar` committed | CI **bootstraps Gradle 8.10.2** and generates the wrapper per run | Binary wrapper JAR is not committed; keeps the repo text-only. `actions/setup-android@v3` also fails on current runners, so the preinstalled SDK is used. |
-| Built-in site configs enabled | All ship **disabled** (`requiresManual: true`) | Verified from this environment: NoBroker → 403, housing.com → 406, 99acres → 403, MagicBricks/OLX → 404. Users enable a source and fix selectors via the Add-site form. |
-| Instrumented tests in CI | Unit tests + lint only | Keeps every run inside the free-tier minute budget. |
+| Google Places Autocomplete | Nominatim search + map marker | Places needs a billing-enabled key |
+| `gradle-wrapper.jar` committed | CI bootstraps Gradle 8.10.2 | Keeps the repo text-only |
+| Instrumented tests in CI | Unit tests + lint only | Free-tier minute budget |
+| - (new) | WebView page-fetch engine | Cloudflare/WAF blocks defeat any HTTP client |
 
 ### Operations
 
-- Signing keystore: `~/.househunter/househunter.jks` (alias `househunter`) — **back this
-  up**; the app cannot be upgraded on a device without the same key.
-- To enable the map: add the `MAPS_API_KEY` repo secret (`gh secret set MAPS_API_KEY`).
-  Without it the app shows an explanatory panel instead of a blank map.
+- Signing keystore: `~/.househunter/househunter.jks` (alias `househunter`) - **back this up**.
+- `MAPS_API_KEY` is configured as a repository secret, so the map renders.
 - Artifact: `gh run download <run-id> --name app-release`.
 
 ---
