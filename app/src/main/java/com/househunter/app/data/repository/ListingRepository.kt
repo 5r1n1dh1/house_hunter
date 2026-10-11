@@ -122,7 +122,9 @@ class ListingRepository @Inject constructor(
         parsed: List<Listing>,
         prefs: UserPrefs,
     ) {
-        val located = applyFallback(parsed, prefs)
+        // Enrichment is best-effort: if the area geocode fails the listings are
+        // still published, just without coordinates.
+        val located = runCatching { applyFallback(parsed, prefs) }.getOrDefault(parsed)
         mergeLock.withLock {
             bySite[site.id] = located
             val merged = dedupe(bySite.values.flatten())
@@ -202,7 +204,9 @@ class ListingRepository @Inject constructor(
             if (name.isEmpty() || centroids.size >= MAX_LOCALITY_GEOCODES) continue
             val key = name.lowercase()
             if (centroids.containsKey(key)) continue
-            val point = geocodeArea(name, prefs) ?: defaultPoint
+            // Best-effort enrichment: a geocoder failure must never fail the
+            // refresh. Listings simply keep no coordinate in that case.
+            val point = runCatching { geocodeArea(name, prefs) }.getOrNull() ?: defaultPoint
             if (point != null) centroids[key] = point
         }
         if (centroids.isEmpty()) return listings
