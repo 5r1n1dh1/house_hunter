@@ -533,6 +533,7 @@ private fun LocalityPickerSheet(
     }
 }
 
+@Composable
 private fun HeaderStat(value: String, label: String) {
     Column {
         Text(
