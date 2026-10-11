@@ -10,6 +10,7 @@ import com.househunter.app.domain.model.SiteStatus
 import com.househunter.app.domain.model.UserPrefs
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
