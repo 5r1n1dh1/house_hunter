@@ -5,6 +5,7 @@ import com.househunter.app.data.scrape.DefaultSiteRegistry
 import com.househunter.app.data.scrape.SiteRegistry
 import com.househunter.app.data.remote.NominatimApi
 import com.househunter.app.data.remote.OverpassApi
+import com.househunter.app.data.remote.PageFetcher
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -29,6 +30,15 @@ abstract class NetworkBindingsModule {
     @Binds
     @Singleton
     abstract fun bindSiteRegistry(impl: DefaultSiteRegistry): SiteRegistry
+
+    /**
+     * `SiteScraper` depends on the [PageFetcher] interface rather than the concrete
+     * WebView engine, so the choice of engine stays per-site configuration and the
+     * scraper remains substitutable in tests. The default HTTP implementation is
+     * what `engine = "http"` sites resolve to.
+     */
+    @Binds
+    abstract fun bindPageFetcher(impl: HttpFetcher): PageFetcher
 }
 
 @Module
