@@ -45,21 +45,21 @@ data class JsonLd(
 
             val objectNode = root.optJSONObject("object")
             val name = sequenceOf(
-                objectNode?.optString("name"),
-                root.optString("name"),
-                root.optString("headline"),
-            ).firstOrNull { it.isNotBlank() && it != "null" }
+                objectNode?.optString("name")?.takeIf { it.isNotBlank() && it != "null" },
+                root.optString("name").takeIf { it.isNotBlank() && it != "null" },
+                root.optString("headline").takeIf { it.isNotBlank() && it != "null" },
+            ).firstOrNull()
 
             val image = sequenceOf(
-                objectNode?.optString("image"),
-                root.optString("image"),
-                root.optJSONArray("image")?.optString(0),
-            ).firstOrNull { it.isNotBlank() && it.startsWith("http") }
+                objectNode?.optString("image")?.takeIf { it.startsWith("http") },
+                root.optString("image").takeIf { it.startsWith("http") },
+                root.optJSONArray("image")?.optString(0)?.takeIf { it.startsWith("http") },
+            ).firstOrNull()
 
             val description = sequenceOf(
-                objectNode?.optString("description"),
-                root.optString("description"),
-            ).firstOrNull { it.isNotBlank() && it != "null" }
+                objectNode?.optString("description")?.takeIf { it.isNotBlank() && it != "null" },
+                root.optString("description").takeIf { it.isNotBlank() && it != "null" },
+            ).firstOrNull()
 
             return JsonLd(price, name, image, description)
         }
