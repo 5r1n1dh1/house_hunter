@@ -433,13 +433,13 @@ private fun LocalityPickerSheet(
                     if (value.trim().length < 3) {
                         results = emptyList()
                         searching = false
-                        return@OutlinedTextField
-                    }
-                    searching = true
-                    scope.launch {
-                        delay(400)
-                        results = onSearch(value.trim(), currentDistrict?.name, currentState?.name)
-                        searching = false
+                    } else {
+                        searching = true
+                        scope.launch {
+                            delay(400)
+                            results = onSearch(value.trim(), currentDistrict?.name, currentState?.name)
+                            searching = false
+                        }
                     }
                 },
                 singleLine = true,
