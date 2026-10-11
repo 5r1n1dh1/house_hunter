@@ -24,9 +24,9 @@ object Normalizer {
         if (text.isNullOrBlank()) return null
         val clean = text.replace(",", "").replace("₹", "").replace("Rs", "", ignoreCase = true)
 
-        // "lakh" and the abbreviated "lac"/"lk" all appear in the wild
-        // (99acres prints "Rs 2.5 Lac").
-        Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*(?:lakh|lac|lk)\\b").find(clean)?.let { match ->
+        // "lakh" and its abbreviations all appear in the wild: 99acres prints "Rs 2.5 Lac"
+        // and bengaluru.rent prints "₹1.20L".
+        Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*(?:lakh|lac|lk|l)\\b").find(clean)?.let { match ->
             return plausible(match.groupValues[1].toDoubleOrNull()?.times(100_000.0))
         }
         Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*k\\b").find(clean)?.let { match ->

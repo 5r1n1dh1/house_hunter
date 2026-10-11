@@ -36,12 +36,17 @@ class SiteScraper @Inject constructor(
         val state = prefs.state?.name.orEmpty()
         val district = prefs.district?.name.orEmpty()
         val locality = prefs.locality?.name.orEmpty()
+        // The dropdown yields OSM districts, which carry a cardinal suffix ("Bengaluru
+        // North"). Property sites address the city without it, and "bengaluru-north"
+        // matches nothing on their side, so {CITY_NAME} strips it.
+        val cityName = district.substringBefore(REGION_SUFFIX).ifBlank { district }
         return config.searchUrlTemplate
             .replace("{STATE}", enc(state))
             .replace("{STATE_SLUG}", enc(slug(state)))
             .replace("{DISTRICT}", enc(district))
             .replace("{DISTRICT_SLUG}", enc(slug(district)))
             .replace("{CITY}", enc(slug(district)))
+            .replace("{CITY_NAME}", enc(slug(cityName)))
             .replace("{LOCALITY}", enc(locality))
             .replace("{LOCALITY_SLUG}", enc(slug(locality)))
             .replace("{PAGE}", page.toString())
@@ -177,9 +182,26 @@ class SiteScraper @Inject constructor(
         val map = config.jsonFieldMap
         val rent = Normalizer.plausible(json.firstDouble(map["rent"] ?: "rent")) ?: return@with null
         val title = json.firstString(map["title"] ?: "propertyTitle") ?: return@with null
-        val detailUrl = Normalizer.resolveUrl(config.baseUrl, json.firstString(map["detailUrl"] ?: "detailUrl"))
-            ?: pageUrl
+
+        // Razorent addresses its pages by an opaque id ("id":"b1f87a83-...") rather than a
+        // link field, so `detailUrl` may be a template containing the id field's value.
+        val rawDetail = json.firstString(map["detailUrl"] ?: "detailUrl")
+        val detailUrl = Normalizer.resolveUrl(
+            baseUrl = config.baseUrl,
+            href = rawDetail?.takeIf { it.contains('{') }?.let { template ->
+                val idKey = template.substringAfter('{').substringBefore('}').trim()
+                json.firstString(idKey)?.let { template.replace("{$idKey}", it) }
+            } ?: rawDetail,
+        ) ?: pageUrl
         val image = json.firstString(map["image"] ?: "originalImageUrl")
+
+        // Razorent publishes `"bhk": 2`; NoBroker publishes `"type":"BHK2"`. Accept both.
+        val bhk = json.firstDouble(map["bhk"] ?: "bhk")?.toInt()
+            ?: parseBhkCode(json.firstString(map["type"] ?: "type"))
+            ?: Normalizer.parseBhk(title)
+        val ownerName = json.firstString(map["owner"] ?: "ownerName")
+        val builderName = json.firstString(map["builder"] ?: "builderName")
+        val advertiser = ownerName ?: builderName
 
         Listing(
             id = listingId(config.id, detailUrl),
@@ -187,29 +209,30 @@ class SiteScraper @Inject constructor(
             siteName = config.name,
             title = title.trim().take(120),
             rent = rent,
-            deposit = Normalizer.plausible(json.firstDouble("deposit")),
-            maintenance = null,
-            bhk = parseBhkCode(json.firstString(map["type"] ?: "type")) ?: Normalizer.parseBhk(title),
+            deposit = Normalizer.plausible(json.firstDouble("deposit") ?: json.firstDouble("securityDeposit")),
+            maintenance = Normalizer.plausible(json.firstDouble("maintenance") ?: json.firstDouble("maintenanceCharges")),
+            bhk = bhk,
             areaSqft = json.firstDouble(map["area"] ?: "propertySize"),
             furnishing = json.firstString(map["furnishing"] ?: "furnishingDesc"),
-            propertyType = null,
+            propertyType = json.firstString(map["propertyType"] ?: "propertyType"),
             amenities = emptyList(),
             locality = json.firstString(map["locality"] ?: "localityTruncated")
                 ?.takeIf { it.isNotBlank() }
                 ?: prefs.locality?.name.orEmpty(),
-            district = prefs.district?.name.orEmpty(),
-            state = prefs.state?.name.orEmpty(),
-            lat = null,
-            lng = null,
+            district = json.firstString(map["district"] ?: "district")
+                ?: prefs.district?.name.orEmpty(),
+            state = json.firstString(map["state"] ?: "state")
+                ?: prefs.state?.name.orEmpty(),
+            lat = json.firstDouble(map["lat"] ?: "lat"),
+            lng = json.firstDouble(map["lng"] ?: "longitude"),
             images = listOfNotNull(ImageUrl.normalize(image)),
-            phone = null,
+            phone = Normalizer.sanitizePhone(json.firstString(map["phone"] ?: "phone")),
             detailUrl = detailUrl,
             description = json.firstString("description"),
-            ownerName = json.firstString(map["owner"] ?: "ownerName")
-                ?: json.firstString(map["builder"] ?: "builderName"),
+            ownerName = advertiser,
             ownerType = when {
-                !json.firstString(map["owner"] ?: "ownerName").isNullOrBlank() -> "Owner"
-                !json.firstString(map["builder"] ?: "builderName").isNullOrBlank() -> "Builder"
+                !ownerName.isNullOrBlank() -> "Owner"
+                !builderName.isNullOrBlank() -> "Builder"
                 else -> null
             },
         )
@@ -314,7 +337,11 @@ class SiteScraper @Inject constructor(
 
         val detailUrl = Normalizer.resolveUrl(
             baseUrl = config.baseUrl,
-            href = selectors.detailUrl?.let { text(card, it) ?: attr(card, it) },
+            href = selectors.detailUrl?.let { selector ->
+                // bengaluru.rent renders each listing as a bare <a class="listing" href="?pin=...">
+                // with no wrapper and no nested anchor, so the card is its own link.
+                if (selector == SELECTOR_SELF) attr(card, "@href") else text(card, selector) ?: attr(card, selector)
+            },
         ) ?: pageUrl
 
         val rawTitle = selectors.title.let { text(card, it) } ?: jsonLd.name
@@ -378,7 +405,8 @@ class SiteScraper @Inject constructor(
     private fun attr(card: Element, selector: String): String? {
         if (selector.isBlank()) return null
         val element = runCatching { card.selectFirst(selector) }.getOrNull() ?: return null
-        return runCatching { element.attr("href") }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        val name = selector.removePrefix("@")
+        return runCatching { element.attr(name) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     private fun text(card: Element, selector: String): String? {
@@ -403,6 +431,12 @@ class SiteScraper @Inject constructor(
 
 /** Sitemap sources return every property on the site; cap the work per refresh. */
 private const val MAX_SITEMAP_URLS = 60
+
+/** Pseudo-selector meaning "the matched card element itself" rather than a descendant. */
+private const val SELECTOR_SELF = ":self"
+
+/** Trailing cardinal that OSM districts carry but property sites never use in city URLs. */
+private val REGION_SUFFIX = Regex("[\\s-]+(North|South|East|West)$", RegexOption.IGNORE_CASE)
 
 /** OpenGraph image, used when the JSON-LD carries no image (Stanza pages). */
 private const val OG_IMAGE_REGEX =

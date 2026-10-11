@@ -60,7 +60,7 @@
     "id": "99acres",
     "name": "99acres",
     "baseUrl": "https://www.99acres.com",
-    "searchUrlTemplate": "https://www.99acres.com/property-for-rent-in-{CITY}-ffid",
+    "searchUrlTemplate": "https://www.99acres.com/property-for-rent-in-{CITY_NAME}-ffid",
     "mode": "cards",
     "selectors": {
       "listContainer": "div[class*='tupleNew__tupleWrap']",
@@ -104,6 +104,66 @@
     "enabled": true,
     "requiresManual": false,
     "note": "Co-living/PG operator. Every property is in a sitemap; each page carries a JSON-LD price. Covers Bengaluru, Pune, Chennai, Hyderabad, Delhi, Indore, Coimbatore, Ahmedabad."
+  },
+  {
+    "id": "razorent",
+    "name": "Razorent",
+    "baseUrl": "https://razorent.com",
+    "searchUrlTemplate": "https://api.razorent.com/properties?city={CITY_NAME}&limit=50",
+    "mode": "json",
+    "jsonAnchorKey": "rent",
+    "jsonFieldMap": {
+      "rent": "rent",
+      "title": "title",
+      "locality": "locality",
+      "area": "area",
+      "furnishing": "furnishingType",
+      "propertyType": "propertyType",
+      "bhk": "bhk",
+      "lat": "latitude",
+      "lng": "longitude",
+      "image": "heroImageUrl",
+      "owner": "owner.name",
+      "detailUrl": "https://razorent.com/property/{id}",
+      "deposit": "securityDeposit",
+      "maintenance": "maintenanceCharges"
+    },
+    "selectors": {
+      "listContainer": "div",
+      "title": "h1",
+      "price": "span"
+    },
+    "pagination": {
+      "maxPages": 2
+    },
+    "rateLimitSeconds": 6,
+    "enabled": true,
+    "requiresManual": false,
+    "engine": "http",
+    "note": "Reads Razorent's own public JSON API (the same one their site calls; no key, no login). Owner-posted listings with rent, BHK, photos and exact coordinates. Sales listings carry no rent and drop out automatically."
+  },
+  {
+    "id": "bengalururent",
+    "name": "Bengaluru Rent",
+    "baseUrl": "https://bengaluru.rent",
+    "searchUrlTemplate": "https://bengaluru.rent/{LOCALITY_SLUG}",
+    "mode": "cards",
+    "selectors": {
+      "listContainer": "a.listing",
+      "title": "span.lb",
+      "price": "span.lr",
+      "imageUrl": "img",
+      "detailUrl": ":self"
+    },
+    "pagination": {
+      "maxPages": 1
+    },
+    "rateLimitSeconds": 6,
+    "enabled": true,
+    "requiresManual": false,
+    "engine": "http",
+    "searchUrlFallback": "https://bengaluru.rent/",
+    "note": "Server-rendered owner listings ('flats direct from owners') with rent, BHK, society, furnishing and a photo. Covers 83 named areas plus society pages; a locality outside its list simply yields nothing."
   },
   {
     "id": "olx",
@@ -172,7 +232,7 @@
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Returns 404 on all search paths. Likely retired - keep for reference."
+    "note": "Site is up and its sitemap lists 1,971 URLs, but it is a BUY/SELL project portal: results are new-build projects priced in Crores or shown as 'Price on Request'. No rental listings exist to scrape."
   },
   {
     "id": "nestriqo",
@@ -193,28 +253,7 @@
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Site is live but all search paths 404. Likely retired."
-  },
-  {
-    "id": "razorent",
-    "name": "Razorent",
-    "baseUrl": "https://www.razorent.com",
-    "searchUrlTemplate": "https://www.razorent.com/property/search?location={LOCALITY}",
-    "selectors": {
-      "listContainer": "div.property-listing",
-      "title": "h3",
-      "price": "div.price",
-      "location": "div.location",
-      "imageUrl": "img",
-      "detailUrl": "a[href*='property']"
-    },
-    "pagination": {
-      "maxPages": 1
-    },
-    "rateLimitSeconds": 8,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "Site is live but search pages return no listings. Manual only."
+    "note": "An SEO/content site (its blog targets '99acres alternative' queries). Its property pages carry no listings or prices."
   },
   {
     "id": "rentmystay",
@@ -235,7 +274,7 @@
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Search endpoint returns HTTP 500. Manual only."
+    "note": "Site is up but renders listings client-side; the server HTML holds no listing cards, prices or links."
   },
   {
     "id": "nestaway",
@@ -254,28 +293,7 @@
     "rateLimitSeconds": 8,
     "enabled": false,
     "requiresManual": true,
-    "note": "Service folded into Urban Company; dead source."
-  },
-  {
-    "id": "bengalururent",
-    "name": "bengaluru.rent",
-    "baseUrl": "https://bengaluru.rent",
-    "searchUrlTemplate": "https://bengaluru.rent/search?query={LOCALITY}",
-    "selectors": {
-      "listContainer": "div.property-card, article",
-      "title": "h2, h3",
-      "price": "span.price, div.price",
-      "location": "span.location",
-      "imageUrl": "img",
-      "detailUrl": "a"
-    },
-    "pagination": {
-      "maxPages": 1
-    },
-    "rateLimitSeconds": 8,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "Bengaluru only. Verify selectors with Test fetch."
+    "note": "Site is up but is a client-rendered Next.js app; the server response contains no listings, only marketing copy. Nothing to read without a browser engine."
   },
   {
     "id": "facebook",

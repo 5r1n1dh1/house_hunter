@@ -111,15 +111,33 @@ object EmbeddedJson {
      */
     fun JSONObject.firstString(vararg keys: String): String? =
         keys.asSequence()
-            .filter { has(it) && !isNull(it) }
-            .mapNotNull { key ->
-                when (val value = get(key)) {
+            .mapNotNull { key -> read(key) }
+            .mapNotNull { value ->
+                when (value) {
                     is String -> value.trim()
                     is Number -> value.toString()
                     else -> null
                 }
             }
             .firstOrNull { it.isNotEmpty() && it != "null" }
+
+    /**
+     * Reads [key], following dots into nested objects (`owner.name`, `address.city`).
+     *
+     * Razorent is the reason this exists: its payload carries the advertiser as
+     * `"owner": {"id": "...", "name": "Roma", ...}`, so a flat key lookup can never reach
+     * the name. Array indices are not supported on purpose - no source needed them.
+     */
+    private fun JSONObject.read(key: String): Any? {
+        if (key.isBlank()) return null
+        var current: Any? = this
+        for (part in key.split('.')) {
+            val obj = current as? JSONObject ?: return null
+            if (!obj.has(part) || obj.isNull(part)) return null
+            current = obj.opt(part)
+        }
+        return current
+    }
 
     /**
      * First key in [keys] that holds a positive number, accepting both JSON numbers and the
@@ -131,9 +149,9 @@ object EmbeddedJson {
      */
     fun JSONObject.firstDouble(vararg keys: String): Double? =
         keys.asSequence()
-            .filter { has(it) && !isNull(it) }
-            .mapNotNull { key ->
-                when (val value = get(key)) {
+            .mapNotNull { key -> read(key) }
+            .mapNotNull { value ->
+                when (value) {
                     is Number -> value.toDouble()
                     // Strip currency symbols/commas/units; a leading '-' keeps the value negative.
                     is String -> value.trim().takeUnless { it.startsWith("-") }
