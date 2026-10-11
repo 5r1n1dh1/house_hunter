@@ -401,6 +401,26 @@ private fun LocalityPickerSheet(
     var browsed by remember { mutableStateOf<List<OsmPlace>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     var browsing by remember { mutableStateOf(false) }
+    var pendingSearch by remember { mutableStateOf("") }
+
+    // Debounced search: triggers when the query changes and settles for 400ms.
+    LaunchedEffect(query) {
+        val trimmed = query.trim()
+        if (trimmed.length < 3) {
+            results = emptyList()
+            searching = false
+            pendingSearch = ""
+            return@LaunchedEffect
+        }
+        searching = true
+        pendingSearch = trimmed
+        delay(400)
+        // Only fire if the user hasn't typed anything else meanwhile.
+        if (pendingSearch == trimmed) {
+            results = onSearch(trimmed, currentDistrict?.name, currentState?.name)
+            searching = false
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -428,20 +448,7 @@ private fun LocalityPickerSheet(
 
             OutlinedTextField(
                 value = query,
-                onChange = { value ->
-                    query = value
-                    if (value.trim().length < 3) {
-                        results = emptyList()
-                        searching = false
-                    } else {
-                        searching = true
-                        scope.launch {
-                            delay(400)
-                            results = onSearch(value.trim(), currentDistrict?.name, currentState?.name)
-                            searching = false
-                        }
-                    }
-                },
+                onValueChange = { query = it },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Search locality") },
