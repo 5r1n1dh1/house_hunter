@@ -70,6 +70,12 @@ data class SiteConfig(
     val sitemapPattern: String? = null,
     val engine: String = ENGINE_HTTP,
     val searchUrlFallback: String? = null,
+    /**
+     * Keep only listings whose text mentions the chosen locality. 99acres and OLX
+     * only expose city-wide pages, so without this the list would show homes from
+     * across the whole city.
+     */
+    val localityFilter: Boolean = false,
 ) {
     /** True when the site can only be read through a real browser engine. */
     val needsBrowser: Boolean get() = engine == ENGINE_WEBVIEW
@@ -132,6 +138,7 @@ data class SiteConfig(
         sitemapPattern?.let { put("sitemapPattern", it) }
         put("engine", engine)
         searchUrlFallback?.let { put("searchUrlFallback", it) }
+        put("localityFilter", localityFilter)
     }
 
     companion object {
@@ -191,6 +198,7 @@ data class SiteConfig(
                     sitemapPattern = json.optStringOrNull("sitemapPattern"),
                     engine = json.optString("engine", ENGINE_HTTP),
                     searchUrlFallback = json.optStringOrNull("searchUrlFallback"),
+                    localityFilter = json.optBoolean("localityFilter", false),
                 )
             }.getOrNull()
         }

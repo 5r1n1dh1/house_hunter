@@ -36,9 +36,18 @@ class HttpFetcher @Inject constructor(private val client: OkHttpClient) : PageFe
             throttle(host, minIntervalMs)
             val builder = Request.Builder()
                 .url(url)
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8")
-                .header("Accept-Language", "en-IN,en;q=0.9")
+                .header("User-Agent", BROWSER_USER_AGENT)
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                // This header family is what makes 99acres and OLX answer at all:
+                // with only a User-Agent their WAFs reply 403/406.
+                .header("sec-ch-ua", "\"Chromium\";v=\"122\", \"Not(A:Brand\";v=\"24\"")
+                .header("sec-ch-ua-mobile", "?0")
+                .header("sec-ch-ua-platform", "\"Linux\"")
+                .header("Sec-Fetch-Dest", "document")
+                .header("Sec-Fetch-Mode", "navigate")
+                .header("Sec-Fetch-Site", "none")
+                .header("Upgrade-Insecure-Requests", "1")
             if (referer != null) builder.header("Referer", referer)
 
             return runCatching {
@@ -101,8 +110,18 @@ class HttpFetcher @Inject constructor(private val client: OkHttpClient) : PageFe
     }
 
     companion object {
+        /** Identifying UA for APIs that demand one (Overpass, Nominatim). */
         const val USER_AGENT =
             "HouseHunterBot/1.0 (personal rental aggregator; +https://github.com/5r1n1dh1/house_hunter)"
+
+        /**
+         * Browser-shaped UA for property sites: their CDNs reject anything that
+         * does not look like a real Chrome navigation (99acres 403, OLX connection
+         * refused), and this header set is what gets them to answer.
+         */
+        const val BROWSER_USER_AGENT =
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/122.0.0.0 Safari/537.36"
         private const val HOUSE_HUNTER_TOKEN = "househunter"
         private const val DEFAULT_INTERVAL_MS = PageFetcher.DEFAULT_INTERVAL_MS
     }

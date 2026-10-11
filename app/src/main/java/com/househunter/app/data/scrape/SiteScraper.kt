@@ -83,13 +83,15 @@ class SiteScraper @Inject constructor(
             if (cards.isEmpty()) break
 
             var found = 0
+            val locality = prefs.locality?.name
             cards.forEach { card ->
-                parseCard(card, config, prefs, url)?.let {
-                    listings += it
-                    found++
-                }
+                val listing = parseCard(card, config, prefs, url) ?: return@forEach
+                // City-wide sources (99acres, OLX) need a locality narrowing step.
+                if (config.localityFilter && !matchesLocality(listing, locality)) return@forEach
+                listings += listing
+                found++
             }
-            if (found == 0) break
+            if (found == 0 && config.localityFilter) continue
 
             val hasNext = config.pagination.nextPageSelector?.let {
                 runCatching { doc.select(it).isNotEmpty() }.getOrDefault(false)
@@ -239,6 +241,18 @@ class SiteScraper @Inject constructor(
             ownerName = jsonLd?.owner,
             ownerType = jsonLd?.owner?.let { "Owner" },
         )
+    }
+
+    /**
+     * Locality match over title/locality text. Tolerates "HSR Layout" vs "HSR",
+     * which is how these sites spell the same place.
+     */
+    private fun matchesLocality(listing: Listing, locality: String?): Boolean {
+        val needle = locality?.trim()?.lowercase()?.takeIf { it.length >= 3 } ?: return true
+        val haystack = listOf(listing.title, listing.locality).joinToString(" ").lowercase()
+        if (haystack.contains(needle)) return true
+        val words = needle.split(' ', '-').filter { it.length >= 4 }
+        return words.isNotEmpty() && words.any { haystack.contains(it) }
     }
 
     private fun parseBhkCode(code: String?): Int? {

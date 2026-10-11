@@ -57,6 +57,32 @@
     "searchUrlFallback": "https://www.magicbricks.com/property-for-rent-in-sahakara-nagar-bangalore-pppfr"
   },
   {
+    "id": "99acres",
+    "name": "99acres",
+    "baseUrl": "https://www.99acres.com",
+    "searchUrlTemplate": "https://www.99acres.com/property-for-rent-in-{CITY}-ffid",
+    "mode": "cards",
+    "selectors": {
+      "listContainer": "div.tupleNew__tupleWrap",
+      "title": "h2.tupleNew__propType",
+      "price": "div.tupleNew__priceValWrap",
+      "areaSqft": "div.tupleNew__areaType",
+      "detailUrl": "a[href*='spid-']",
+      "ownerTag": "div.tupleNew__pbL1",
+      "imageUrl": "div.tupleNew__imgWrap img"
+    },
+    "localityFilter": true,
+    "pagination": {
+      "maxPages": 2
+    },
+    "rateLimitSeconds": 8,
+    "enabled": true,
+    "requiresManual": false,
+    "engine": "http",
+    "searchUrlFallback": "https://www.99acres.com/property-for-rent-in-bangalore-ffid",
+    "note": "City-wide page (no locality URL); results are narrowed to your locality on device. Needs browser-shaped request headers - it answers 403 without them."
+  },
+  {
     "id": "stanza",
     "name": "Stanza Living",
     "baseUrl": "https://www.stanzaliving.com",
@@ -80,71 +106,52 @@
     "note": "Co-living/PG operator. Every property is in a sitemap; each page carries a JSON-LD price. Covers Bengaluru, Pune, Chennai, Hyderabad, Delhi, Indore, Coimbatore, Ahmedabad."
   },
   {
-    "id": "99acres",
-    "name": "99acres",
-    "baseUrl": "https://www.99acres.com",
-    "searchUrlTemplate": "https://www.99acres.com/property-search/rent/{LOCALITY_SLUG}",
+    "id": "olx",
+    "name": "OLX India",
+    "baseUrl": "https://www.olx.in",
+    "searchUrlTemplate": "https://www.olx.in/{CITY}_g4058803/real-estate_c3",
+    "mode": "cards",
     "selectors": {
-      "listContainer": "div.af-card, div.pg-cardwrap",
-      "title": "h2.af-card-title",
-      "price": "div.af-card-rent, div.price",
-      "location": "div.af-card-sector",
-      "imageUrl": "img",
-      "detailUrl": "a[href*='property']"
+      "listContainer": "div[data-cy='search-card']",
+      "title": "span[data-cy='title']",
+      "price": "span[data-cy='search-card-price']",
+      "detailUrl": "a[data-cy='ad-title']",
+      "imageUrl": "img"
     },
+    "localityFilter": true,
     "pagination": {
       "maxPages": 1
     },
     "rateLimitSeconds": 10,
     "enabled": false,
-    "requiresManual": false,
-    "note": "Cloudflare blocks plain HTTP clients (403) but not a real browser. Scraped with the WebView engine.",
-    "engine": "webview",
-    "searchUrlFallback": "https://www.99acres.com/property-search/rent"
+    "requiresManual": true,
+    "engine": "http",
+    "searchUrlFallback": "https://www.olx.in/bengaluru_g4058803/real-estate_c3",
+    "note": "Reachable with browser headers, but rent appears only inside ad descriptions (often as per-sq.ft), so prices would be wrong. Left off deliberately."
   },
   {
     "id": "housing",
     "name": "housing.com",
     "baseUrl": "https://housing.com",
-    "searchUrlTemplate": "https://housing.com/in/rent/search/bangalore-{LOCALITY_SLUG}",
+    "searchUrlTemplate": "https://housing.com/in/rent/search/{CITY}",
+    "mode": "cards",
     "selectors": {
       "listContainer": "div.search-list-item, div.card",
       "title": "h2, h3",
       "price": "span.rent-price, div.price",
-      "location": "div.locality-name, span",
-      "imageUrl": "img",
-      "detailUrl": "a[href*='/rent/']"
+      "detailUrl": "a[href*='/rent/']",
+      "imageUrl": "img"
     },
+    "localityFilter": true,
     "pagination": {
       "maxPages": 2
     },
-    "rateLimitSeconds": 12,
+    "rateLimitSeconds": 10,
     "enabled": false,
-    "requiresManual": false,
-    "note": "Answers 406 to plain HTTP clients. Scraped with the WebView engine.",
+    "requiresManual": true,
     "engine": "webview",
-    "searchUrlFallback": "https://housing.com/in/rent/search/bangalore"
-  },
-  {
-    "id": "olx",
-    "name": "OLX India",
-    "baseUrl": "https://www.olx.in",
-    "searchUrlTemplate": "https://www.olx.in/bangalore/rent/{LOCALITY_SLUG}",
-    "selectors": {
-      "listContainer": "div._2nXW, div[data-cy='search-card']",
-      "title": "span[data-cy='title'], h2",
-      "price": "span[data-cy='search-card-price']",
-      "detailUrl": "a[data-cy='ad-title']"
-    },
-    "pagination": {
-      "maxPages": 1
-    },
-    "rateLimitSeconds": 12,
-    "enabled": false,
-    "requiresManual": false,
-    "note": "Refuses plain HTTP connections. Scraped with the WebView engine.",
-    "engine": "webview",
-    "searchUrlFallback": "https://www.olx.in/bangalore/rent"
+    "searchUrlFallback": "https://housing.com/",
+    "note": "Renders listings client-side with no server data, and its WAF answers 406 to non-browser clients. Only usable via the WebView engine after the JS runs; off by default."
   },
   {
     "id": "nobrokerage",
