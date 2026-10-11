@@ -38,7 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.househunter.app.data.scrape.SiteConfig
 import com.househunter.app.ui.components.Pill
-import import com.househunter.app.CrashLog
+import com.househunter.app.CrashLog
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
