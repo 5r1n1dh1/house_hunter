@@ -378,9 +378,10 @@ class ListingRepositoryStreamingTest {
     }
 
     /**
-     * Nominatim is never actually reached: [PREFS] carries coordinates, so
-     * `resolveFallbackPoint` short-circuits. The stub exists only because [Geocoder]
-     * requires the dependency, and it fails loudly if that ever changes.
+     * Fails loudly if the test ever reaches Nominatim. The test listings have
+     * empty localities so `enrichCoordinates` returns before geocoding, but this
+     * guard catches accidental regressions where geocoding is attempted with
+     * coordinates that fall through.
      */
     private object StubNominatim : NominatimApi {
         override suspend fun search(

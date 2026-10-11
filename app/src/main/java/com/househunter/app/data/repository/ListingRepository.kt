@@ -83,7 +83,7 @@ class ListingRepository @Inject constructor(
                     async {
                         runCatching { scraper.scrape(site, prefs) }
                             .onSuccess { parsed ->
-                                publish(site, parsed, prefs)
+                                publish(site, parsed)
                                 updateStatus(site.id) {
                                     it.copy(count = parsed.size, loading = false)
                                 }
@@ -101,6 +101,13 @@ class ListingRepository @Inject constructor(
                     }
                 }.awaitAll()
             }
+
+            // Enrichment runs *after* the fan-out has drained, never on the
+            // critical path: the geocoder throttles to one request per second, so
+            // doing it inline delayed every card behind a 1.1s sleep per locality
+            // and defeated streaming entirely. Cards appear first, coordinates
+            // arrive a moment later.
+            enrichCoordinates(prefs)
 
             _listings.value
         } finally {
@@ -120,24 +127,28 @@ class ListingRepository @Inject constructor(
     private suspend fun publish(
         site: SiteConfig,
         parsed: List<Listing>,
-        prefs: UserPrefs,
     ) {
-        // Enrichment is best-effort: if the area geocode fails the listings are
-        // still published, just without coordinates.
-        val located = runCatching { applyFallback(parsed, prefs) }.getOrDefault(parsed)
         mergeLock.withLock {
-            bySite[site.id] = located
-            val merged = dedupe(bySite.values.flatten())
-            // Every access to `byId` - here, in `find` and in `loadDetail` - takes
-            // this one monitor. An earlier version guarded the writes here with
-            // `mergeLock` but the reads with `synchronized(byId)`, and a main-thread
-            // `find` racing a rebuild could observe the map mid-`clear`/`putAll`.
-            synchronized(byId) {
-                byId.clear()
-                byId.putAll(merged.associateBy { it.id })
-            }
-            _listings.value = merged
+            bySite[site.id] = parsed
+            republishLocked()
         }
+    }
+
+    /**
+     * Rebuilds the derived views of [bySite]. Caller must already hold [mergeLock].
+     *
+     * Every access to `byId` - here, in `find` and in `loadDetail` - takes this one
+     * monitor. An earlier version guarded the writes here with `mergeLock` but the
+     * reads with `synchronized(byId)`, and a main-thread `find` racing a rebuild
+     * could observe the map mid-`clear`/`putAll`.
+     */
+    private fun republishLocked() {
+        val merged = dedupe(bySite.values.flatten())
+        synchronized(byId) {
+            byId.clear()
+            byId.putAll(merged.associateBy { it.id })
+        }
+        _listings.value = merged
     }
 
     fun find(id: String): Listing? = synchronized(byId) { byId[id] }
@@ -177,48 +188,54 @@ class ListingRepository @Inject constructor(
     }
 
     /**
-     * Fills in missing coordinates **per distinct locality** rather than with one
-     * shared centroid.
+     * Fills in missing coordinates **per distinct locality** and republishes.
      *
-     * The previous version stamped the *same* point onto every listing that lacked
-     * coordinates, so all 70 cards reported identical distances (13.9 km / 4.7 km)
-     * and "locate on map" dropped a pin in the middle of the city. Geocoding each
-     * distinct locality keeps distances meaningful; the result is marked
-     * `hasRealLocation = false` so the UI can say it is an area approximation.
+     * The previous version stamped one shared centroid onto every listing, so all
+     * 70 cards reported identical distances and "locate on map" dropped a pin in
+     * the middle of the city. Geocoding each distinct locality keeps distances
+     * meaningful; results keep `hasRealLocation = false` so the UI marks them as
+     * area approximations and refuses to use them for navigation.
      *
-     * Bounded because Nominatim allows one request per second: a page yields a
-     * handful of localities, and past [MAX_LOCALITY_GEOCODES] the remainder simply
-     * keep no coordinates rather than stalling the refresh.
+     * Bounded because Nominatim allows one request per second; past
+     * [MAX_LOCALITY_GEOCODES] the remaining localities simply keep no coordinate.
      */
-    private suspend fun applyFallback(listings: List<Listing>, prefs: UserPrefs): List<Listing> {
-        if (listings.any { it.hasRealLocation }) return listings
-
-        val missing = listings.filter { it.lat == null || it.lng == null }
-        if (missing.isEmpty()) return listings
-
+    private suspend fun enrichCoordinates(prefs: UserPrefs) {
+        val batches = mergeLock.withLock { bySite.toMap() }
         val centroids = HashMap<String, Pair<Double, Double>>()
         val defaultPoint = defaultCentroid(prefs)
 
-        for (listing in missing) {
+        // Keep the original spelling for the query; the lowercase key is only the
+        // lookup key, so "Sahakara Nagar" is geocoded as written, not lowercased.
+        val wanted = LinkedHashMap<String, String>()
+        for (listing in batches.values.flatten()) {
+            if (listing.hasRealLocation || (listing.lat != null && listing.lng != null)) continue
             val name = listing.locality.trim()
-            if (name.isEmpty() || centroids.size >= MAX_LOCALITY_GEOCODES) continue
-            val key = name.lowercase()
-            if (centroids.containsKey(key)) continue
-            // Best-effort enrichment: a geocoder failure must never fail the
-            // refresh. Listings simply keep no coordinate in that case.
+            if (name.isEmpty()) continue
+            wanted.putIfAbsent(name.lowercase(), name)
+            if (wanted.size >= MAX_LOCALITY_GEOCODES) break
+        }
+        if (wanted.isEmpty()) return
+
+        for ((key, name) in wanted) {
+            // Best-effort: a lookup failure leaves those listings without a
+            // coordinate instead of failing the refresh.
             val point = runCatching { geocodeArea(name, prefs) }.getOrNull() ?: defaultPoint
             if (point != null) centroids[key] = point
         }
-        if (centroids.isEmpty()) return listings
+        if (centroids.isEmpty()) return
 
-        return listings.map { listing ->
-            if (listing.lat != null && listing.lng != null) {
-                listing
-            } else {
-                val point = centroids[listing.locality.trim().lowercase()] ?: defaultPoint
-                // `hasRealLocation` stays false: this is an area centroid, not the property.
-                if (point == null) listing else listing.copy(lat = point.first, lng = point.second)
+        mergeLock.withLock {
+            bySite.replaceAll { _, batch ->
+                batch.map { listing ->
+                    if (listing.hasRealLocation || (listing.lat != null && listing.lng != null)) {
+                        listing
+                    } else {
+                        val point = centroids[listing.locality.trim().lowercase()]
+                        if (point == null) listing else listing.copy(lat = point.first, lng = point.second)
+                    }
+                }
             }
+            republishLocked()
         }
     }
 
