@@ -82,10 +82,6 @@ data class SiteConfig(
             ?: searchUrlTemplate.takeIf { it.isNotBlank() && !it.contains('{') }
             ?: baseUrl
 
-    companion object {
-        const val ENGINE_HTTP = "http"
-        const val ENGINE_WEBVIEW = "webview"
-    } {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("name", name)
@@ -136,6 +132,10 @@ data class SiteConfig(
     }
 
     companion object {
+        /** Plain HTTP is the default; `webview` opts into the real-browser engine. */
+        const val ENGINE_HTTP = "http"
+        const val ENGINE_WEBVIEW = "webview"
+
         fun fromJson(json: JSONObject): SiteConfig? {
             return runCatching {
                 val id = json.optString("id").takeIf { it.isNotBlank() } ?: return null
