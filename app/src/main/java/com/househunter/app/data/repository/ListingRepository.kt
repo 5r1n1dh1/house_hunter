@@ -78,16 +78,12 @@ class ListingRepository @Inject constructor(
             val sites = registry.enabled()
             _status.value = sites.map { SiteStatus(it.id, it.name, loading = true) }
 
-            // Resolved once, not per site: it may hit Nominatim, which is rate
-            // limited to one request per second.
-            val fallbackPoint = resolveFallbackPoint(prefs)
-
             coroutineScope {
                 sites.map { site ->
                     async {
                         runCatching { scraper.scrape(site, prefs) }
                             .onSuccess { parsed ->
-                                publish(site, parsed, fallbackPoint)
+                                publish(site, parsed, prefs)
                                 updateStatus(site.id) {
                                     it.copy(count = parsed.size, loading = false)
                                 }
@@ -124,9 +120,9 @@ class ListingRepository @Inject constructor(
     private suspend fun publish(
         site: SiteConfig,
         parsed: List<Listing>,
-        fallbackPoint: Pair<Double, Double>?,
+        prefs: UserPrefs,
     ) {
-        val located = applyFallback(parsed, fallbackPoint)
+        val located = applyFallback(parsed, prefs)
         mergeLock.withLock {
             bySite[site.id] = located
             val merged = dedupe(bySite.values.flatten())
@@ -179,31 +175,68 @@ class ListingRepository @Inject constructor(
     }
 
     /**
-     * Centroid used for listings that publish no coordinates.
+     * Fills in missing coordinates **per distinct locality** rather than with one
+     * shared centroid.
      *
-     * Resolved **once per refresh** rather than per site: the geocoder fallback
-     * path hits Nominatim, which enforces a one-request-per-second policy, so
-     * resolving it inside the per-site path would serialise the whole fan-out.
+     * The previous version stamped the *same* point onto every listing that lacked
+     * coordinates, so all 70 cards reported identical distances (13.9 km / 4.7 km)
+     * and "locate on map" dropped a pin in the middle of the city. Geocoding each
+     * distinct locality keeps distances meaningful; the result is marked
+     * `hasRealLocation = false` so the UI can say it is an area approximation.
+     *
+     * Bounded because Nominatim allows one request per second: a page yields a
+     * handful of localities, and past [MAX_LOCALITY_GEOCODES] the remainder simply
+     * keep no coordinates rather than stalling the refresh.
      */
-    private suspend fun resolveFallbackPoint(prefs: UserPrefs): Pair<Double, Double>? {
-        val locality = prefs.locality
-        if (locality?.lat != null && locality.lng != null) return locality.lat to locality.lng
+    private suspend fun applyFallback(listings: List<Listing>, prefs: UserPrefs): List<Listing> {
+        if (listings.any { it.hasRealLocation }) return listings
+
+        val missing = listings.filter { it.lat == null || it.lng == null }
+        if (missing.isEmpty()) return listings
+
+        val centroids = HashMap<String, Pair<Double, Double>>()
+        val defaultPoint = defaultCentroid(prefs)
+
+        for (listing in missing) {
+            val name = listing.locality.trim()
+            if (name.isEmpty() || centroids.size >= MAX_LOCALITY_GEOCODES) continue
+            val key = name.lowercase()
+            if (centroids.containsKey(key)) continue
+            val point = geocodeArea(name, prefs) ?: defaultPoint
+            if (point != null) centroids[key] = point
+        }
+        if (centroids.isEmpty()) return listings
+
+        return listings.map { listing ->
+            if (listing.lat != null && listing.lng != null) {
+                listing
+            } else {
+                val point = centroids[listing.locality.trim().lowercase()] ?: defaultPoint
+                // `hasRealLocation` stays false: this is an area centroid, not the property.
+                if (point == null) listing else listing.copy(lat = point.first, lng = point.second)
+            }
+        }
+    }
+
+    /** Locality name plus its district/state context, which Nominatim needs to disambiguate. */
+    private suspend fun geocodeArea(
+        name: String,
+        prefs: UserPrefs,
+    ): Pair<Double, Double>? {
         val query = listOfNotNull(
-            prefs.locality?.name,
+            name.takeIf { it.isNotBlank() },
             prefs.district?.name,
             prefs.state?.name,
         ).joinToString(", ").takeIf { it.isNotBlank() } ?: return null
         return geocoder.geocode(query)
     }
 
-    private fun applyFallback(
-        listings: List<Listing>,
-        point: Pair<Double, Double>?,
-    ): List<Listing> {
-        if (point == null) return listings
-        return listings.map { listing ->
-            if (listing.lat != null && listing.lng != null) listing
-            else listing.copy(lat = point.first, lng = point.second)
-        }
+    /** Last resort: the locality the user picked during onboarding. */
+    private fun defaultCentroid(prefs: UserPrefs): Pair<Double, Double>? {
+        val locality = prefs.locality
+        return if (locality?.lat != null && locality.lng != null) locality.lat to locality.lng else null
     }
 }
+
+/** Nominatim allows one request per second; cap area geocodes per batch. */
+private const val MAX_LOCALITY_GEOCODES = 6

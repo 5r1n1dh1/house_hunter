@@ -108,7 +108,14 @@ fun HomeScreen(
      */
     fun openInMaps(listing: Listing) {
         val label = listing.locality.ifBlank { listing.title }
-        val point = if (listing.lat != null && listing.lng != null) {
+        if (!listing.hasRealLocation) {
+            Toast.makeText(context, "This site does not publish an exact location", Toast.LENGTH_SHORT).show()
+            return
+        }
+        // Only a source-published coordinate points at the property. A locality
+        // centroid would drop a pin in the middle of the area, which is worse than
+        // saying nothing, so the card's button is disabled in that case.
+        val point = if (listing.hasRealLocation && listing.lat != null && listing.lng != null) {
             "${listing.lat},${listing.lng}"
         } else {
             null

@@ -9,7 +9,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # `write` is required for `gh release create`; with `read` the tag-build's
+  # release step failed and every APK stopped at "artifact only".
+  contents: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -133,3 +135,47 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
+
+      # Every successful build on main is published as an installable release so
+      # the APK is reachable from Releases rather than only from the run page.
+      - name: Publish release (auto-tag on main)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::no APK to publish"; exit 1; }
+
+          # Next patch version after the highest existing vX.Y.Z tag.
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -1 || true)
+          if [ -n "$latest" ]; then
+            base="${latest#v}"
+            major="${base%%.*}"; rest="${base#*.}"
+            minor="${rest%%.*}"; patch="${rest##*.}"
+            TAG="v$major.$minor.$((patch + 1))"
+          else
+            TAG="v1.0.0"
+          fi
+
+          # Re-runs must not collide with a tag this job already created.
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists; refreshing its release instead."
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+          fi
+
+          NOTES=$(cat <<EOF
+          Install: download \`app-release.apk\` and open it (enable "install from unknown sources" if prompted).
+
+          - Sources: NoBroker, MagicBricks, 99acres, Razorent, Stanza Living, Bengaluru.rent
+          - Sources are scraped in parallel and results appear as each one loads
+          - Distances are marked \`~\` when the site only publishes an area, not an exact pin
+          EOF
+          )
+          gh release create "$TAG" "$APK" \
+            --title "House Hunter $TAG" \
+            --notes "$NOTES" || gh release upload "$TAG" "$APK" --clobber
+          echo "Published $TAG"

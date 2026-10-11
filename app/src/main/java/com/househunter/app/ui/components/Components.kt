@@ -324,15 +324,23 @@ fun ListingCard(
                 )
                 if (workDistanceKm != null) {
                     Spacer(Modifier.width(8.dp))
+                    // "~" marks an area-centroid estimate: the portal gave a
+                    // neighbourhood, not a pin, so the number is honest but rough.
                     Pill(
-                        text = "${formatKm(workDistanceKm)} away",
+                        text = (if (listing.hasRealLocation) "" else "~") +
+                            "${formatKm(workDistanceKm)} away",
                         container = MaterialTheme.colorScheme.primaryContainer,
                         content = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
                 Spacer(Modifier.weight(1f))
                 IconActionButton(Icons.Filled.Call, "Call owner", onCall, !listing.phone.isNullOrBlank())
-                IconActionButton(Icons.Filled.Place, "Locate on map", onLocate)
+                IconActionButton(
+                    Icons.Filled.Place,
+                    if (listing.hasRealLocation) "Locate on map" else "No exact location published",
+                    onLocate,
+                    listing.hasRealLocation,
+                )
                 IconActionButton(Icons.Filled.PhotoCamera, "Photos", onPhotos)
                 IconActionButton(Icons.Filled.OpenInNew, "Open original listing", onOpenBrowser)
             }

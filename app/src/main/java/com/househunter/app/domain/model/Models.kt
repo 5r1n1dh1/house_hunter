@@ -78,6 +78,17 @@ data class Listing(
     val state: String = "",
     val lat: Double? = null,
     val lng: Double? = null,
+    /**
+     * True only when [lat]/[lng] came from the source for *this property*.
+     *
+     * Most portals publish a neighbourhood, not a pin, so a missing coordinate is
+     * filled in with the locality centroid to keep filtering usable. That is an
+     * approximation, and treating it as the property's location produced the same
+     * bogus distance on every card and sent "locate on map" to the wrong place.
+     * Distances are shown with an approximation marker when this is false, and
+     * opening a map requires a real coordinate.
+     */
+    val hasRealLocation: Boolean = false,
     val images: List<String> = emptyList(),
     val phone: String? = null,
     val detailUrl: String,

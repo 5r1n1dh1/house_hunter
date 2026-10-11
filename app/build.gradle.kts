@@ -8,20 +8,28 @@ plugins {
 }
 
 /**
- * Reads the Maps key from the same `.env` the secrets plugin consumes.
+ * Reads the Maps key, in order of precedence:
+ *  1. the `MAPS_API_KEY` environment variable - this is how CI supplies it
+ *     (`env:` on the assembleRelease step), and
+ *  2. `.env`, then `.env.example` for local builds.
  *
- * The secrets plugin fills **manifest placeholders only**; it does not generate
- * `BuildConfig` fields. `MapAvailability` needs the value in Kotlin, so it is
- * read here once and used for both. Falls back to the placeholder from
- * `.env.example`, which `MapAvailability` recognises as "no key configured" -
- * so a machine without a key builds and simply runs without maps.
+ * The environment variable MUST come first. A previous version read only the
+ * `.env` files, so CI - which has no `.env` because it is gitignored - always
+ * built with the `.env.example` placeholder and the app reported "API key not
+ * configured" even though the secret was set.
+ *
+ * The secrets plugin fills manifest placeholders only and does not generate
+ * `BuildConfig` fields, so `MapAvailability` needs the value here as well.
  */
 val mapsApiKey: String = run {
+    providers.environmentVariable("MAPS_API_KEY").orNull?.takeIf { it.isNotBlank() }?.let { return@run it }
+
     val envFile = rootProject.file(".env")
     val example = rootProject.file(".env.example")
-    val source = listOf(envFile, example).firstOrNull { it.exists() } ?: return@run ""
-    source.readLines()
-        .firstOrNull { it.trimStart().startsWith("MAPS_API_KEY=") }
+    listOf(envFile, example)
+        .firstOrNull { it.exists() }
+        ?.readLines()
+        ?.firstOrNull { it.trimStart().startsWith("MAPS_API_KEY=") }
         ?.substringAfter('=')
         ?.trim()
         .orEmpty()

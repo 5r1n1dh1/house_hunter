@@ -224,6 +224,7 @@ open class SiteScraper @Inject constructor(
                 ?: prefs.state?.name.orEmpty(),
             lat = json.firstDouble(map["lat"] ?: "lat"),
             lng = json.firstDouble(map["lng"] ?: "longitude"),
+            hasRealLocation = json.has(map["lat"] ?: "lat") && json.has(map["lng"] ?: "longitude"),
             images = listOfNotNull(ImageUrl.normalize(image)),
             phone = Normalizer.sanitizePhone(json.firstString(map["phone"] ?: "phone")),
             detailUrl = detailUrl,
