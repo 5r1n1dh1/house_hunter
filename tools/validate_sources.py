@@ -120,11 +120,15 @@ def json_ld_prices(html: str) -> list[dict]:
     return out
 
 
-def parse_rent(text: str | None):
+def parse_rent(text):
+    # APIs send rent as a JSON number while scraped pages send text; coerce once
+    # here so both paths share the same plausibility rules.
+    if isinstance(text, (int, float)):
+        return _plausible(float(text))
     if not text or not text.strip():
         return None
     clean = text.replace(",", "").replace("₹", "").replace("Rs", "")
-    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*lakh", clean, re.I)
+    m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*(?:lakh|lac|lk|l)\b", clean, re.I)
     if m:
         return _plausible(float(m.group(1)) * 100_000)
     m = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*k\b", clean, re.I)
@@ -251,6 +255,69 @@ def check_99acres(locality_slug: str, city: str) -> None:
     print(f"  with owner field: {sum(1 for r in rows if r['owner'])}/{len(rows)}")
 
 
+def check_razorent(city: str) -> None:
+    """Razorent publishes a keyless public JSON API that its own front-end calls."""
+    print("\n=== Razorent (public JSON API) ===")
+    raw = fetch(f"https://api.razorent.com/properties?city={city}&limit=50")
+    if not raw:
+        print("  FAIL: no response")
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        print("  FAIL: response was not JSON")
+        return
+    props = data.get("properties", [])
+    print(f"  returned {len(props)} objects (server reports {data.get('pagination', {}).get('total')})")
+    rows = []
+    for p in props:
+        owner = p.get("owner") or {}
+        rows.append({
+            "rent": parse_rent(p.get("rent")) if p.get("rent") else None,
+            "title": p.get("title"),
+            "area": p.get("area"),
+            "bhk": p.get("bhk"),
+            "locality": p.get("locality"),
+            "link": f"https://razorent.com/property/{p.get('id')}",
+            "image": bool(p.get("heroImageUrl")),
+            "geo": bool(p.get("latitude") and p.get("longitude")),
+            "owner": owner.get("name") if isinstance(owner, dict) else None,
+        })
+    priced = [r for r in rows if r["rent"]]
+    print(f"  priced: {len(priced)}/{len(rows)}  "
+          f"image: {sum(1 for r in rows if r['image'])}  "
+          f"geo: {sum(1 for r in rows if r['geo'])}  "
+          f"owner: {sum(1 for r in rows if r['owner'])}")
+    if priced:
+        rents = sorted(r["rent"] for r in priced)
+        print(f"  rent range: Rs {rents[0]:,.0f} - Rs {rents[-1]:,.0f}")
+
+
+def check_bengaluru_rent(locality_slug: str) -> None:
+    """Server-rendered owner listings: each card is a bare <a class="listing">."""
+    print(f"\n=== Bengaluru.rent (owner listings for /{locality_slug}) ===")
+    html = fetch(f"https://bengaluru.rent/{locality_slug}")
+    if not html:
+        print("  FAIL: no response")
+        return
+    cards = re.findall(r'<a class="listing" href="([^"]+)"[^>]*>(.*?)</a>', html, re.S)
+    rows = []
+    for href, inner in cards:
+        price = re.search(r'<span class="lr">([^<]*)</span>', inner)
+        label = re.search(r'<span class="lb">([^<]*)</span>', inner)
+        rows.append({
+            "rent": parse_rent(price.group(1)) if price else None,
+            "title": (label.group(1).strip() if label else ""),
+            "locality": locality_slug,
+            "link": href,
+            "image": bool(re.search(r'<img[^>]+src="([^"]+)"', inner)),
+        })
+    print(f"  cards: {len(cards)} | priced: {sum(1 for r in rows if r['rent'])}")
+    _report(rows, "locality", locality_slug)
+    if not cards:
+        print("  note: this locality has no page on the site (83 areas + 163 societies)")
+
+
 def _report(rows, key, needle) -> None:
     good = [r for r in rows if r["rent"]]
     bad = [r for r in rows if not r["rent"]]
@@ -274,7 +341,11 @@ def main() -> int:
     ap.add_argument("--city", default="bangalore")
     ap.add_argument("--stanza-city", default="bengaluru",
                     help="Stanza uses different city slugs (bengaluru, not bangalore)")
-    ap.add_argument("--only", choices=["99acres", "nobroker", "magicbricks", "stanza"])
+    ap.add_argument("--razorent-city", default="bengaluru",
+                    help="Razorent's API uses full city names (bengaluru, not bangalore)")
+    ap.add_argument("--only", choices=[
+        "99acres", "nobroker", "magicbricks", "stanza", "razorent", "bengalururent",
+    ])
     args = ap.parse_args()
 
     if args.only in (None, "99acres"):
@@ -283,6 +354,10 @@ def main() -> int:
         check_nobroker(args.locality, args.city)
     if args.only in (None, "magicbricks"):
         check_magicbricks(args.locality, args.city)
+    if args.only in (None, "razorent"):
+        check_razorent(args.razorent_city)
+    if args.only in (None, "bengalururent"):
+        check_bengaluru_rent(args.locality)
     if args.only in (None, "stanza"):
         check_stanza(args.stanza_city, args.locality)
     return 0

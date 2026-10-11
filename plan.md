@@ -556,22 +556,45 @@ then `base64 -w0 househunter.jks`).
 
 ## Implementation Status
 
-CI is green (run `38128017797`: unit tests + lint + signed release APK) and
-**54 real listings are validated for Sahakara Nagar** via
-`python3 tools/validate_sources.py sahakara-nagar` (24 NoBroker + 30 MagicBricks).
+CI is green (run `38133588848`: unit tests + lint + signed release APK).
+**Six sources now return real data**; 72 listings are validated for
+Sahakara Nagar alone (24 NoBroker + 30 MagicBricks + 18 99acres) via
+`python3 tools/validate_sources.py sahakara-nagar`.
 
 ### Working sources (all validated against live data)
 
-| Site | Mode | Engine | Verified for Sahakara Nagar |
-|------|------|--------|------------------------------|
-| NoBroker | embedded JSON | HTTP | 24 listings, Rs 8k-4L, 24/24 images + detail URLs |
-| MagicBricks | CSS cards + JSON-LD | HTTP | 30 listings, Rs 16k-2L |
+| Site | Mode | Engine | Verified result |
+|------|------|--------|------------------|
+| NoBroker | embedded JSON | HTTP | 24 listings for Sahakara Nagar, Rs 8k-4L, 24/24 images + detail URLs |
+| MagicBricks | CSS cards + JSON-LD | HTTP | 30 listings for Sahakara Nagar, Rs 16k-2L |
+| 99acres | CSS cards | HTTP | 18 listings for Sahakara Nagar, Rs 27.5k-85k |
+| Razorent | public JSON API | HTTP | 39 Bengaluru listings, 39/39 with image + coordinates + owner name |
 | Stanza Living | sitemap + JSON-LD | HTTP | 6 Bengaluru residences (no Sahakara coverage, falls back to city-wide) |
-| 99acres / housing.com / OLX | CSS cards | **WebView** | blocked to plain HTTP clients; real-browser engine wired, ships disabled |
+| bengaluru.rent | CSS cards | HTTP | 21 owner listings across 4 areas, Rs 18k-90k (83 areas + 163 societies; no Sahakara page) |
 
-Key discovery: all three sources hide prices behind JavaScript, so DOM scraping
-returns nothing. The data lives in **embedded JSON** (NoBroker) and **schema.org
-JSON-LD** (MagicBricks, Stanza) - that is what made them usable.
+Key discovery: most sources hide prices behind JavaScript, so DOM scraping
+returns nothing. The data lives in **embedded JSON** (NoBroker, Razorent),
+**schema.org JSON-LD** (MagicBricks, Stanza), or **browser-shaped request
+headers** (99acres) - that is what made them usable.
+
+### Sites researched and deliberately left off
+
+These were all reachable (HTTP 200 on the root) - none is a network problem.
+Each note in `sites_default.json` records the specific reason.
+
+| Site | Why it is off |
+|------|---------------|
+| NoBrokerage.com | Sitemap lists 1,971 URLs, but it is a **buy/sell project** portal: prices are in Crores or "Price on Request". No rental listings exist. |
+| NestAway | Client-rendered Next.js app; the server response holds marketing copy only ("overseeing Rs 2000+cr in transactions"), zero listings. |
+| RentMyStay | Client-rendered; no listing cards, prices or links in the server HTML. |
+| NestRiqo | An SEO/content site (blog targets "99acres alternative" queries); its property pages carry no listings. |
+| OLX | Reachable with browser headers, but rent appears only inside ad descriptions and is often per-sq.ft - prices would be wrong. |
+| housing.com | JS shell with no server data; its WAF answers 406 to non-browser clients. |
+
+Razorent's public API (`api.razorent.com/properties?city=...`, no key, no login)
+is the same endpoint their own front-end calls, so it needs no circumvention.
+Sales listings carry `salePrice` and no `rent`, so the plausibility guard drops
+them automatically.
 
 ### Bug fixes proven against real data
 
