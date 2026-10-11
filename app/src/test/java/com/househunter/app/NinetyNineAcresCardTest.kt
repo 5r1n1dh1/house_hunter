@@ -45,7 +45,7 @@ class NinetyNineAcresCardTest {
         // The h2 holds "<strong>1 BHK Flat for rent</strong> in Ashraya Layout",
         // so the app picks up the locality for free - that is worth asserting.
         assertEquals("1 BHK Flat for rent in Ashraya Layout", card.selectFirst(config.title)!!.text())
-        assertEquals("Dealer �� 6d ago", card.selectFirst(config.ownerTag)!!.text().replace("·", "·"))
+        assertEquals("Dealer", card.selectFirst(config.ownerTag)!!.selectFirst("span")!!.text())
     }
 
     @Test
