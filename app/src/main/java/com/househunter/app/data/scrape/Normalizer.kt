@@ -6,24 +6,54 @@ package com.househunter.app.data.scrape
  */
 object Normalizer {
 
-    /** "₹18,000" | "Rs. 25000 /month" | "1.8 Lakh" -> Double rupees. */
+    /** Rents below this are mis-parsed (floor/bedroom counts), not real listings. */
+    const val MIN_PLAUSIBLE_RENT = 500.0
+
+    /** Guard against runaway numbers (₹1 crore ceiling). */
+    const val MAX_PLAUSIBLE_RENT = 10_000_000.0
+
+    /**
+     * "₹18,000" | "Rs. 25,000 /month" | "1.8 Lakh" -> Double rupees.
+     *
+     * Prefers numbers adjacent to a currency marker so "Floor 1, ₹24,000" yields
+     * 24000 rather than 1, and rejects anything outside
+     * [MIN_PLAUSIBLE_RENT, MAX_PLAUSIBLE_RENT] — that guard is what stops bogus
+     * "₹1/mo" cards when a site selector matches a floor/bedroom count.
+     */
     fun parseRent(text: String?): Double? {
         if (text.isNullOrBlank()) return null
         val clean = text.replace(",", "").replace("₹", "").replace("Rs", "", ignoreCase = true)
+
         Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*lakh").find(clean)?.let { match ->
-            return match.groupValues[1].toDoubleOrNull()?.times(100_000.0)
+            return plausible(match.groupValues[1].toDoubleOrNull()?.times(100_000.0))
         }
         Regex("(?i)([0-9]+(?:\\.[0-9]+)?)\\s*k\\b").find(clean)?.let { match ->
-            return match.groupValues[1].toDoubleOrNull()?.times(1_000.0)
+            return plausible(match.groupValues[1].toDoubleOrNull()?.times(1_000.0))
         }
-        // Take the first well-formed number: "25,000" -> 25000, ignoring stray dots/symbols.
-        val number = Regex("([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+
+        // 1) A number attached to a currency marker anywhere in the text - safest.
+        val withCurrency = Regex("(?i)(?:₹|rs\\.?|inr)\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)")
             .find(text)
             ?.groupValues
             ?.get(1)
             ?.replace(",", "")
-        return number?.toDoubleOrNull()?.takeIf { it > 0 }
+            ?.toDoubleOrNull()
+        if (withCurrency != null) return plausible(withCurrency)
+
+        // 2) Otherwise the first well-formed number.
+        val first = Regex("([0-9]+(?:,[0-9]+)*(?:\\.[0-9]+)?)")
+            .find(text)
+            ?.groupValues
+            ?.get(1)
+            ?.replace(",", "")
+            ?.toDoubleOrNull()
+
+        return plausible(first)
     }
+
+    /** Indian rents sit between ₹500 and ₹1 crore; anything else is a mis-parse. */
+    fun plausible(value: Double?): Double? =
+        value?.takeIf { it >= MIN_PLAUSIBLE_RENT && it <= MAX_PLAUSIBLE_RENT }
 
     /** "2 BHK" | "3bhk" | "2.5 BHK" -> 2 */
     fun parseBhk(text: String?): Int? {

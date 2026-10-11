@@ -17,17 +17,17 @@ import javax.inject.Singleton
  *  - identifying User-Agent and a site Referer (hotlink-protected CDNs).
  */
 @Singleton
-class HttpFetcher @Inject constructor(private val client: OkHttpClient) {
+class HttpFetcher @Inject constructor(private val client: OkHttpClient) : PageFetcher {
 
     private val lastRequestAt = ConcurrentHashMap<String, Long>()
     private val robotsCache = ConcurrentHashMap<String, List<String>>()
     private val hostMutexes = ConcurrentHashMap<String, Mutex>()
 
     /** Returns the response body, or null when blocked/failed. */
-    suspend fun get(
+    override suspend fun fetch(
         url: String,
-        referer: String? = null,
-        minIntervalMs: Long = DEFAULT_INTERVAL_MS,
+        referer: String?,
+        minIntervalMs: Long,
     ): String? {
         val host = runCatching { URI(url).host }.getOrNull() ?: return null
         if (!isAllowed(url)) return null
@@ -104,6 +104,6 @@ class HttpFetcher @Inject constructor(private val client: OkHttpClient) {
         const val USER_AGENT =
             "HouseHunterBot/1.0 (personal rental aggregator; +https://github.com/5r1n1dh1/house_hunter)"
         private const val HOUSE_HUNTER_TOKEN = "househunter"
-        private const val DEFAULT_INTERVAL_MS = 5_000L
+        private const val DEFAULT_INTERVAL_MS = PageFetcher.DEFAULT_INTERVAL_MS
     }
 }

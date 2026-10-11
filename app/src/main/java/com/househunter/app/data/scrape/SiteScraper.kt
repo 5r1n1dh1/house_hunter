@@ -1,6 +1,7 @@
 package com.househunter.app.data.scrape
 
 import com.househunter.app.data.remote.HttpFetcher
+import com.househunter.app.data.remote.PageFetcher
 import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.UserPrefs
 import org.jsoup.Jsoup
@@ -15,7 +16,11 @@ import javax.inject.Singleton
  * new site never requires new code.
  */
 @Singleton
-class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
+class SiteScraper @Inject constructor(
+    private val fetcher: HttpFetcher,
+    /** Optional; only present when the WebView engine is wired in. */
+    private val webViewFetcher: com.househunter.app.data.remote.PageFetcher? = null,
+) {
 
     /** Builds the search URL from the template + current preferences. */
     fun buildUrl(config: SiteConfig, prefs: UserPrefs, page: Int = 1): String {
@@ -33,7 +38,28 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
             .replace("{PAGE}", page.toString())
     }
 
-    suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> {
+    /**
+     * Fetches a page with the engine the site declares. The WebView engine exists
+     * for CDNs that reject plain HTTP clients (99acres/housing.com/OLX), so the
+     * engine is a per-site config choice, never a hard-coded path.
+     */
+    private suspend fun fetchPage(
+        config: SiteConfig,
+        url: String,
+        minIntervalMs: Long = config.rateLimitSeconds * 1000L,
+    ): String? = engineFor(config).fetch(url = url, referer = config.baseUrl, minIntervalMs = minIntervalMs)
+
+    private fun engineFor(config: SiteConfig): PageFetcher =
+        if (config.needsBrowser) webViewFetcher ?: fetcher
+
+    suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> = when (config.mode) {
+        SourceMode.JSON -> scrapeJson(config, prefs)
+        SourceMode.SITEMAP -> scrapeSitemap(config, prefs)
+        else -> scrapeCards(config, prefs)
+    }
+
+    /** Classic CSS-card scraping over a paginated search page. */
+    private suspend fun scrapeCards(config: SiteConfig, prefs: UserPrefs): List<Listing> {
         if (config.searchUrlTemplate.isBlank() || config.selectors.listContainer.isBlank()) return emptyList()
 
         val listings = mutableListOf<Listing>()
@@ -41,11 +67,7 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
 
         for (page in 1..pages) {
             val url = buildUrl(config, prefs, page)
-            val html = fetcher.get(
-                url = url,
-                referer = config.baseUrl,
-                minIntervalMs = config.rateLimitSeconds * 1000L,
-            ) ?: break
+            val html = fetchPage(config, url) ?: break
 
             val doc = runCatching { Jsoup.parse(html, config.baseUrl) }.getOrNull() ?: break
             val cards = runCatching { doc.select(config.selectors.listContainer) }.getOrNull().orEmpty()
@@ -68,13 +90,90 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
         return listings
     }
 
+    /**
+     * NoBroker-style: the search page embeds the listing array as JSON, while the
+     * visible price is rendered client-side. Parsing the JSON is what made this
+     * source return data at all.
+     */
+    private suspend fun scrapeJson(config: SiteConfig, prefs: UserPrefs): List<Listing> {
+        val anchor = config.jsonAnchorKey ?: return emptyList()
+        val pages = config.pagination.maxPages.coerceIn(1, 10)
+        val listings = mutableListOf<Listing>()
+
+        for (page in 1..pages) {
+            val url = buildUrl(config, prefs, page)
+            val html = fetchPage(config, url) ?: break
+            val objects = EmbeddedJson.extractArray(html, anchor)
+            if (objects.isEmpty()) break
+
+            objects.mapNotNullTo(listings) { listingFromJson(it, config, prefs, url) }
+            if (page >= pages) break
+        }
+        return listings
+    }
+
+    /**
+     * Stanza-style: every property is listed in a sitemap, so enumerate URLs and
+     * read each page's JSON-LD. No search endpoint has to be guessed.
+     */
+    private suspend fun scrapeSitemap(config: SiteConfig, prefs: UserPrefs): List<Listing> {
+        val indexUrl = config.sitemapIndexUrl ?: return emptyList()
+        val source = SitemapSource { url -> fetchPage(config, url) }
+
+        val indexXml = fetchPage(config, indexUrl) ?: return emptyList()
+        val targets = LinkedHashSet<String>(source.urls(indexXml))
+        source.discoverSitemaps(indexXml).forEach { mapUrl ->
+            targets += source.urls(fetchPage(config, mapUrl).orEmpty())
+        }
+        if (targets.isEmpty()) return emptyList()
+
+        val city = config.jsonFieldMap["city"]
+            ?: prefs.district?.name?.substringAfterLast(' ')?.lowercase()
+            ?: prefs.state?.name?.lowercase()
+            .orEmpty()
+        val filtered = source
+            .filter(targets.toList(), city = city, locality = prefs.locality?.name)
+            .take(MAX_SITEMAP_URLS)
+
+        return filtered.mapNotNull { propertyUrl ->
+            val html = fetchPage(config, propertyUrl) ?: return@mapNotNull null
+            listingFromJsonLd(config, prefs, propertyUrl, html)
+        }
+    }
+
+    private fun listingFromJsonLd(
+        config: SiteConfig,
+        prefs: UserPrefs,
+        pageUrl: String,
+        html: String,
+    ): Listing? {
+        val jsonLd = runCatching { JsonLd.parse(html) }.getOrNull()
+        val rent = Normalizer.plausible(jsonLd?.price) ?: return null
+        val title = jsonLd?.name ?: jsonLd?.description?.take(60) ?: return null
+        return Listing(
+            id = listingId(config.id, pageUrl),
+            siteId = config.id,
+            siteName = config.name,
+            title = title.substringBefore(" - ").trim().take(90),
+            rent = rent,
+            locality = prefs.locality?.name.orEmpty(),
+            district = prefs.district?.name.orEmpty(),
+            state = prefs.state?.name.orEmpty(),
+            images = listOfNotNull(ImageUrl.normalize(jsonLd?.image)),
+            detailUrl = pageUrl,
+            description = jsonLd?.description,
+        )
+    }
+
+    private fun parseBhkCode(code: String?): Int? {
+        if (code.isNullOrBlank()) return null
+        val digits = code.filter { it.isDigit() }
+        return digits.toIntOrNull()?.takeIf { it in 1..20 }
+    }
+
     /** Second phase: parse the detail page for the full description, images, phone. */
     suspend fun fetchDetail(config: SiteConfig, listing: Listing): Listing {
-        val html = fetcher.get(
-            url = listing.detailUrl,
-            referer = config.baseUrl,
-            minIntervalMs = config.rateLimitSeconds * 1000L,
-        ) ?: return listing
+        val html = fetchPage(config, listing.detailUrl) ?: return listing
 
         val fields = config.detailFields
         val description = Normalizer.capture(fields.description, html)
@@ -85,8 +184,7 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
             .orEmpty()
         val images = Normalizer.capture(fields.images, html)
             ?.split(",", ";", "|")
-            ?.map { it.trim() }
-            ?.filter { it.startsWith("http") }
+            ?.mapNotNull { ImageUrl.normalize(it.trim()) }
             .orEmpty()
         val phone = Normalizer.sanitizePhone(
             Normalizer.capture(fields.phone, html) ?: Normalizer.capture(fields.phone, listing.detailUrl),
@@ -130,8 +228,8 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
 
         val rawTitle = selectors.title.let { text(card, it) } ?: jsonLd.name
         val rawPrice = selectors.price.let { text(card, it) }
-        val rent = Normalizer.parseRent(rawPrice)
-            ?: jsonLd.price
+        val rent = Normalizer.plausible(Normalizer.parseRent(rawPrice))
+            ?: Normalizer.plausible(jsonLd.price)
             ?: return null
         val title = rawTitle?.takeIf { it.isNotBlank() } ?: "Rental listing"
 
@@ -154,9 +252,11 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
             lat = null,
             lng = null,
             images = listOfNotNull(
-                selectors.imageUrl?.let { text(card, it) ?: attr(card, it) }
-                    ?.let { Normalizer.resolveUrl(config.baseUrl, it) }
-                    ?: jsonLd.image,
+                ImageUrl.normalize(
+                    selectors.imageUrl?.let { text(card, it) ?: attr(card, it) }
+                        ?.let { Normalizer.resolveUrl(config.baseUrl, it) }
+                        ?: jsonLd.image,
+                ),
             ),
             phone = Normalizer.sanitizePhone(selectors.phone?.let { text(card, it) }),
             detailUrl = detailUrl,
@@ -189,3 +289,6 @@ class SiteScraper @Inject constructor(private val fetcher: HttpFetcher) {
     private fun slug(value: String): String =
         value.trim().lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
 }
+
+/** Sitemap sources return every property on the site; cap the work per refresh. */
+private const val MAX_SITEMAP_URLS = 60

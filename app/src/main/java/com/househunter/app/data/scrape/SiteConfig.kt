@@ -33,6 +33,21 @@ data class Pagination(
     val pageParam: String? = null,
 )
 
+/**
+ * How a site's listings are discovered.
+ *
+ *  - [MODE_CARDS] — CSS cards on a search page (classic scraping).
+ *  - [MODE_JSON] — listings live in an embedded JSON array; [jsonAnchorKey] names a
+ *    field present on every listing object (NoBroker uses "rent").
+ *  - [MODE_SITEMAP] — every property URL is enumerated from a sitemap, then each
+ *    page yields one listing via its JSON-LD (Stanza Living).
+ */
+object SourceMode {
+    const val CARDS = "cards"
+    const val JSON = "json"
+    const val SITEMAP = "sitemap"
+}
+
 data class SiteConfig(
     val id: String,
     val name: String,
@@ -46,7 +61,31 @@ data class SiteConfig(
     val isCustom: Boolean = false,
     val requiresManual: Boolean = false,
     val note: String = "",
+    val mode: String = SourceMode.CARDS,
+    val jsonAnchorKey: String? = null,
+    val jsonFieldMap: Map<String, String> = emptyMap(),
+    val sitemapIndexUrl: String? = null,
+    val sitemapPattern: String? = null,
+    val engine: String = ENGINE_HTTP,
+    val searchUrlFallback: String? = null,
 ) {
+    /** True when the site can only be read through a real browser engine. */
+    val needsBrowser: Boolean get() = engine == ENGINE_WEBVIEW
+
+    /**
+     * Where to send the user when scraping cannot be trusted (bot-blocked sites).
+     * Templates still carrying placeholders are useless in a browser, so they fall
+     * back to the site root.
+     */
+    val browserUrl: String
+        get() = searchUrlFallback?.takeIf { it.isNotBlank() }
+            ?: searchUrlTemplate.takeIf { it.isNotBlank() && !it.contains('{') }
+            ?: baseUrl
+
+    companion object {
+        const val ENGINE_HTTP = "http"
+        const val ENGINE_WEBVIEW = "webview"
+    } {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("name", name)
@@ -82,6 +121,18 @@ data class SiteConfig(
         put("enabled", enabled)
         put("requiresManual", requiresManual)
         put("note", note)
+        put("mode", mode)
+        jsonAnchorKey?.let { put("jsonAnchorKey", it) }
+        if (jsonFieldMap.isNotEmpty()) {
+            put(
+                "jsonFieldMap",
+                JSONObject().apply { jsonFieldMap.forEach { (k, v) -> put(k, v) } },
+            )
+        }
+        sitemapIndexUrl?.let { put("sitemapIndexUrl", it) }
+        sitemapPattern?.let { put("sitemapPattern", it) }
+        put("engine", engine)
+        searchUrlFallback?.let { put("searchUrlFallback", it) }
     }
 
     companion object {
@@ -127,6 +178,15 @@ data class SiteConfig(
                     isCustom = json.optBoolean("isCustom", false),
                     requiresManual = json.optBoolean("requiresManual", false),
                     note = json.optString("note", ""),
+                    mode = json.optString("mode", SourceMode.CARDS),
+                    jsonAnchorKey = json.optStringOrNull("jsonAnchorKey"),
+                    jsonFieldMap = json.optJSONObject("jsonFieldMap")?.let { obj ->
+                        obj.keys().asSequence().associateWith { obj.optString(it) }
+                    }.orEmpty(),
+                    sitemapIndexUrl = json.optStringOrNull("sitemapIndexUrl"),
+                    sitemapPattern = json.optStringOrNull("sitemapPattern"),
+                    engine = json.optString("engine", ENGINE_HTTP),
+                    searchUrlFallback = json.optStringOrNull("searchUrlFallback"),
                 )
             }.getOrNull()
         }

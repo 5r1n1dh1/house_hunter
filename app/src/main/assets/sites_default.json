@@ -1,5 +1,36 @@
 [
   {
+    "id": "nobroker",
+    "name": "NoBroker",
+    "baseUrl": "https://www.nobroker.in",
+    "searchUrlTemplate": "https://www.nobroker.in/properties-for-rent-in-{LOCALITY_SLUG}-bangalore-page-{PAGE}",
+    "mode": "json",
+    "jsonAnchorKey": "rent",
+    "jsonFieldMap": {
+      "rent": "rent",
+      "title": "propertyTitle",
+      "type": "type",
+      "area": "propertySize",
+      "detailUrl": "detailUrl",
+      "image": "originalImageUrl",
+      "furnishing": "furnishingDesc",
+      "locality": "localityTruncated"
+    },
+    "selectors": {
+      "listContainer": "div[unused]",
+      "title": "h2",
+      "price": ""
+    },
+    "pagination": {
+      "maxPages": 3
+    },
+    "rateLimitSeconds": 6,
+    "enabled": true,
+    "requiresManual": false,
+    "note": "Listings are an embedded JSON array; the visible price is rendered by JavaScript, so the app reads the JSON. City slug is 'bangalore'.",
+    "searchUrlFallback": "https://www.nobroker.in/flats-for-rent-in-bangalore_bangalore"
+  },
+  {
     "id": "magicbricks",
     "name": "MagicBricks",
     "baseUrl": "https://www.magicbricks.com",
@@ -19,28 +50,98 @@
     "rateLimitSeconds": 8,
     "enabled": true,
     "requiresManual": false,
-    "note": "Primary source. Prices come from the schema.org JSON-LD each card embeds. The city slug is hardcoded to 'bangalore'; enable other sites for wider coverage."
+    "note": "Primary source. Prices come from the schema.org JSON-LD each card embeds. The city slug is hardcoded to 'bangalore'; enable other sites for wider coverage.",
+    "searchUrlFallback": "https://www.magicbricks.com/property-for-rent-in-sahakara-nagar-bangalore-pppfr"
   },
   {
-    "id": "nobroker",
-    "name": "NoBroker",
-    "baseUrl": "https://www.nobroker.in",
-    "searchUrlTemplate": "https://www.nobroker.in/property-search/{DISTRICT_SLUG}/{LOCALITY_SLUG}",
+    "id": "stanza",
+    "name": "Stanza Living",
+    "baseUrl": "https://www.stanzaliving.com",
+    "searchUrlTemplate": "",
+    "mode": "sitemap",
+    "sitemapIndexUrl": "https://www.stanzaliving.com/sitemap.xml",
+    "jsonFieldMap": {
+      "city": "bengaluru"
+    },
     "selectors": {
-      "listContainer": "div[class*='card'], div.tab-cont",
-      "title": "h2, h3",
-      "price": "div[class*='rent'] , span[class*='price']",
-      "location": "div[class*='locality']",
+      "listContainer": "div[unused]",
+      "title": "h1",
+      "price": ""
+    },
+    "pagination": {
+      "maxPages": 1
+    },
+    "rateLimitSeconds": 4,
+    "enabled": true,
+    "requiresManual": false,
+    "note": "Co-living/PG operator. Every property is in a sitemap; each page carries a JSON-LD price. Covers Bengaluru, Pune, Chennai, Hyderabad, Delhi, Indore, Coimbatore, Ahmedabad."
+  },
+  {
+    "id": "99acres",
+    "name": "99acres",
+    "baseUrl": "https://www.99acres.com",
+    "searchUrlTemplate": "https://www.99acres.com/property-search/rent/{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div.af-card, div.pg-cardwrap",
+      "title": "h2.af-card-title",
+      "price": "div.af-card-rent, div.price",
+      "location": "div.af-card-sector",
       "imageUrl": "img",
       "detailUrl": "a[href*='property']"
     },
     "pagination": {
       "maxPages": 1
     },
-    "rateLimitSeconds": 8,
+    "rateLimitSeconds": 10,
     "enabled": false,
-    "requiresManual": true,
-    "note": "Returns 403/404 to automated requests from most networks. If it works on your connection, enable and test the selectors."
+    "requiresManual": false,
+    "note": "Cloudflare blocks plain HTTP clients (403) but not a real browser. Scraped with the WebView engine.",
+    "engine": "webview",
+    "searchUrlFallback": "https://www.99acres.com/property-search/rent"
+  },
+  {
+    "id": "housing",
+    "name": "housing.com",
+    "baseUrl": "https://housing.com",
+    "searchUrlTemplate": "https://housing.com/in/rent/search/bangalore-{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div.search-list-item, div.card",
+      "title": "h2, h3",
+      "price": "span.rent-price, div.price",
+      "location": "div.locality-name, span",
+      "imageUrl": "img",
+      "detailUrl": "a[href*='/rent/']"
+    },
+    "pagination": {
+      "maxPages": 2
+    },
+    "rateLimitSeconds": 12,
+    "enabled": false,
+    "requiresManual": false,
+    "note": "Answers 406 to plain HTTP clients. Scraped with the WebView engine.",
+    "engine": "webview",
+    "searchUrlFallback": "https://housing.com/in/rent/search/bangalore"
+  },
+  {
+    "id": "olx",
+    "name": "OLX India",
+    "baseUrl": "https://www.olx.in",
+    "searchUrlTemplate": "https://www.olx.in/bangalore/rent/{LOCALITY_SLUG}",
+    "selectors": {
+      "listContainer": "div._2nXW, div[data-cy='search-card']",
+      "title": "span[data-cy='title'], h2",
+      "price": "span[data-cy='search-card-price']",
+      "detailUrl": "a[data-cy='ad-title']"
+    },
+    "pagination": {
+      "maxPages": 1
+    },
+    "rateLimitSeconds": 12,
+    "enabled": false,
+    "requiresManual": false,
+    "note": "Refuses plain HTTP connections. Scraped with the WebView engine.",
+    "engine": "webview",
+    "searchUrlFallback": "https://www.olx.in/bangalore/rent"
   },
   {
     "id": "nobrokerage",
@@ -127,48 +228,6 @@
     "note": "Search endpoint returns HTTP 500. Manual only."
   },
   {
-    "id": "99acres",
-    "name": "99acres",
-    "baseUrl": "https://www.99acres.com",
-    "searchUrlTemplate": "https://www.99acres.com/property-search/rent/{LOCALITY}",
-    "selectors": {
-      "listContainer": "div.af-card, div.pg-cardwrap",
-      "title": "h2.af-card-title",
-      "price": "div.af-card-rent, div.price",
-      "location": "div.af-card-sector",
-      "imageUrl": "img",
-      "detailUrl": "a[href*='property']"
-    },
-    "pagination": {
-      "maxPages": 1
-    },
-    "rateLimitSeconds": 10,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "Cloudflare: every request from this network returns 403. Manual only."
-  },
-  {
-    "id": "housing",
-    "name": "housing.com",
-    "baseUrl": "https://housing.com",
-    "searchUrlTemplate": "https://housing.com/in/rent/search/{CITY}-{LOCALITY}",
-    "selectors": {
-      "listContainer": "div.search-list-item, div.card",
-      "title": "h2, h3",
-      "price": "span.rent-price, div.price",
-      "location": "div.locality-name, span",
-      "imageUrl": "img",
-      "detailUrl": "a[href*='/rent/']"
-    },
-    "pagination": {
-      "maxPages": 2
-    },
-    "rateLimitSeconds": 12,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "Answers 406 Not Acceptable to bots. Manual only."
-  },
-  {
     "id": "nestaway",
     "name": "NestAway (archived)",
     "baseUrl": "https://www.nestaway.com",
@@ -207,25 +266,6 @@
     "enabled": false,
     "requiresManual": true,
     "note": "Bengaluru only. Verify selectors with Test fetch."
-  },
-  {
-    "id": "olx",
-    "name": "OLX India",
-    "baseUrl": "https://www.olx.in",
-    "searchUrlTemplate": "https://www.olx.in/{CITY}/rent/{LOCALITY}",
-    "selectors": {
-      "listContainer": "div._2nXW, div[data-cy='search-card']",
-      "title": "span[data-cy='title'], h2",
-      "price": "span[data-cy='search-card-price']",
-      "detailUrl": "a[data-cy='ad-title']"
-    },
-    "pagination": {
-      "maxPages": 1
-    },
-    "rateLimitSeconds": 12,
-    "enabled": false,
-    "requiresManual": true,
-    "note": "JS-rendered + anti-bot (connection refused from this network). Manual only."
   },
   {
     "id": "facebook",
