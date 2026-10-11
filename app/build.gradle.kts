@@ -7,6 +7,26 @@ plugins {
     alias(libs.plugins.secrets)
 }
 
+/**
+ * Reads the Maps key from the same `.env` the secrets plugin consumes.
+ *
+ * The secrets plugin fills **manifest placeholders only**; it does not generate
+ * `BuildConfig` fields. `MapAvailability` needs the value in Kotlin, so it is
+ * read here once and used for both. Falls back to the placeholder from
+ * `.env.example`, which `MapAvailability` recognises as "no key configured" -
+ * so a machine without a key builds and simply runs without maps.
+ */
+val mapsApiKey: String = run {
+    val envFile = rootProject.file(".env")
+    val example = rootProject.file(".env.example")
+    val source = listOf(envFile, example).firstOrNull { it.exists() } ?: return@run ""
+    source.readLines()
+        .firstOrNull { it.trimStart().startsWith("MAPS_API_KEY=") }
+        ?.substringAfter('=')
+        ?.trim()
+        .orEmpty()
+}
+
 android {
     namespace = "com.househunter.app"
     compileSdk = 35
@@ -18,20 +38,25 @@ android {
         versionCode = 1
         versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
     }
 
     signingConfigs {
-        create("debugConfig") {
-            storeFile = file("${rootDir}/debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        // Only used when debug.keystore is actually present. CI has no such file,
+        // so applying it unconditionally would fail the build before compiling.
+        if (file("${rootDir}/debug.keystore").exists()) {
+            create("debugConfig") {
+                storeFile = file("${rootDir}/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debugConfig")
+            signingConfigs.findByName("debugConfig")?.let { signingConfig = it }
             isMinifyEnabled = false
         }
         release {

@@ -137,26 +137,54 @@ class Geocoder @Inject constructor(
     private val memo = ConcurrentHashMap<String, Pair<Double, Double>?>()
     private var lastCallAt = 0L
 
+    /**
+     * Candidate work locations for [query], best first.
+     *
+     * Replaces the old single-shot `limit=1` lookup, which returned `null` for
+     * anything Nominatim could not match exactly and left the user with an empty
+     * screen. This asks for a list, and when the full text matches nothing it
+     * retries [PlaceSearch.relaxedQueries] - the change that makes "hpe iwf01
+     * bangaluru" resolvable, since dropping the `IWF01` token finds the company.
+     *
+     * Failures are **not** memoised. Nominatim mirrors occasionally time out, and
+     * caching that as "no such place" made a transient failure permanent for the
+     * rest of the process - the user could not retry their way out of it.
+     */
+    suspend fun searchCandidates(query: String): List<PlaceSearch.Candidate> {
+        val trimmed = query.trim()
+        if (trimmed.length < 3) return emptyList()
+
+        val direct = runQuery(trimmed)
+        if (direct.isNotEmpty()) return direct
+
+        // Progressive relaxation, one extra request each. Nominatim's usage policy
+        // asks for at most one request per second, which [runQuery] enforces.
+        for (relaxed in PlaceSearch.relaxedQueries(trimmed)) {
+            val hits = runQuery(relaxed)
+            if (hits.isNotEmpty()) return hits
+        }
+        return emptyList()
+    }
+
+    /** One Nominatim round-trip, paced to the public usage policy. */
+    private suspend fun runQuery(query: String): List<PlaceSearch.Candidate> = withContext(io) {
+        val now = System.currentTimeMillis()
+        val wait = 1_100L - (now - lastCallAt)
+        if (wait > 0) delay(wait)
+        lastCallAt = System.currentTimeMillis()
+
+        runCatching {
+            val body = nominatim.search(query, limit = 10).string()
+            PlaceSearch.parse(body, query)
+        }.getOrDefault(emptyList())
+    }
+
     suspend fun geocode(query: String): Pair<Double, Double>? {
         val key = query.trim().lowercase()
         if (key.isEmpty()) return null
         if (memo.containsKey(key)) return memo[key]
 
-        val result = withContext(io) {
-            val now = System.currentTimeMillis()
-            val wait = 1_100L - (now - lastCallAt)
-            if (wait > 0) delay(wait)
-            lastCallAt = System.currentTimeMillis()
-
-            runCatching {
-                val body = nominatim.search(query, limit = 1).string()
-                val arr = JSONArray(body)
-                val first = arr.optJSONObject(0) ?: return@runCatching null
-                val lat = first.optString("lat").toDoubleOrNull()
-                val lon = first.optString("lon").toDoubleOrNull()
-                if (lat != null && lon != null) lat to lon else null
-            }.getOrNull()
-        }
+        val result = searchCandidates(query).firstOrNull()?.let { it.lat to it.lng }
         memo[key] = result
         return result
     }

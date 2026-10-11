@@ -184,14 +184,7 @@ fun ListingImage(
     val context = LocalContext.current
     val normalized = remember(url) { ImageUrl.normalize(url) }
     if (normalized == null) {
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
-            Icon(
-                imageVector = Icons.Filled.Home,
-                contentDescription = contentDescription,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(28.dp),
-            )
-        }
+        Placeholder(modifier, contentDescription)
         return
     }
     val request = remember(normalized, detailUrl) {
@@ -201,12 +194,38 @@ fun ListingImage(
             .crossfade(true)
             .build()
     }
+
+    // Coil keeps the slot empty until the first frame, and blank forever if the
+    // fetch fails - so a dead hotlink looked identical to "no photo". State
+    // flips to failed and the placeholder takes over, which makes the difference
+    // visible instead of showing an empty grey box.
+    var failed by remember(normalized) { mutableStateOf(false) }
+    if (failed) {
+        Placeholder(modifier, contentDescription)
+        return
+    }
+
     AsyncImage(
         model = request,
         contentDescription = contentDescription,
         contentScale = contentScale,
+        onError = { failed = true },
+        onLoading = { failed = false },
         modifier = modifier,
     )
+}
+
+/** Shown when there is no usable image URL, or the fetch failed. */
+@Composable
+private fun Placeholder(modifier: Modifier, contentDescription: String?) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = Icons.Filled.Home,
+            contentDescription = contentDescription,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(28.dp),
+        )
+    }
 }
 
 @Composable

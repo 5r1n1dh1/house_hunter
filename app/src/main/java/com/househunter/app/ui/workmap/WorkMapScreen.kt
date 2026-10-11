@@ -49,6 +49,12 @@ import com.google.android.gms.maps.model.LatLng
 import com.househunter.app.domain.model.WorkLocation
 import com.househunter.app.ui.map.MapUnavailableWithAction
 import com.househunter.app.ui.map.SafeGoogleMap
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 
 /**
  * Work locations, rebuilt as three explicit steps.
@@ -65,6 +71,7 @@ fun WorkMapScreen(
     viewModel: WorkMapViewModel = hiltViewModel(),
 ) {
     val state by viewModel.ui.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val editingLabel = if (state.activeTarget == 0) "Work 1" else "Work 2"
 
     Scaffold(
@@ -126,15 +133,69 @@ fun WorkMapScreen(
                 },
             )
 
-            state.results.firstOrNull()?.let { result ->
+            // Results are a *list*, not a single auto-picked point: Nominatim's top
+            // hit is often a bus stop rather than the campus the user meant.
+            if (state.results.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "Pick a location",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.results.take(MAX_RESULTS).forEach { candidate ->
+                        ResultRow(
+                            title = candidate.name,
+                            subtitle = candidate.displayName,
+                            onClick = { viewModel.pick(candidate) },
+                        )
+                    }
+                }
+            }
+
+            // No match: say so, and offer the two ways in that always work.
+            if (state.notFound && !state.searching) {
+                Text(
+                    text = "No match for \"${state.query.trim()}\". " +
+                        "Private office parks are often missing from OpenStreetMap - " +
+                        "paste the pin from Google Maps, or drop it on the map below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
                 FilledTonalButton(
-                    onClick = { viewModel.pick(result) },
+                    onClick = { viewModel.setManualMode(true) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.large,
                 ) {
-                    Icon(Icons.Filled.Place, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Filled.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Use ${result.label}")
+                    Text("Enter coordinates manually")
+                }
+            }
+
+            if (state.manualMode) {
+                var manual by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = manual,
+                    onValueChange = { manual = it },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Paste coordinates or Maps link") },
+                    placeholder = { Text("12.9719, 77.6412") },
+                    shape = MaterialTheme.shapes.large,
+                )
+                FilledTonalButton(
+                    onClick = {
+                        if (!viewModel.applyManual(manual)) {
+                            Toast.makeText(context, "Could not read those coordinates", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                ) {
+                    Text("Use this location")
                 }
             }
 
@@ -213,6 +274,45 @@ fun WorkMapScreen(
                     Text("Done")
                 }
             }
+        }
+    }
+}
+
+/** At most this many geocoding candidates are offered; more is noise on a phone. */
+private const val MAX_RESULTS = 5
+
+/** One selectable search hit: name, then the full address for disambiguation. */
+@Composable
+private fun ResultRow(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Filled.Place,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

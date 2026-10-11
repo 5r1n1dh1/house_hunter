@@ -95,6 +95,46 @@ fun HomeScreen(
         }
     }
 
+    /**
+     * Opens the property in Google Maps.
+     *
+     * Previously the locate button simply navigated to the details screen, which
+     * made the pin on a listing card useless. Three cases, in order of precision:
+     * exact coordinates when the source publishes them (Razorent does), then a
+     * locality search, then the listing's own web page. `google.navigation:q=`
+     * is tried first so the Maps app launches in turn-by-turn navigation mode;
+     * if no Maps app is installed the plain `geo:` URI opens whatever map app
+     * exists, and failing that the listing page is copied to the clipboard.
+     */
+    fun openInMaps(listing: Listing) {
+        val label = listing.locality.ifBlank { listing.title }
+        val point = if (listing.lat != null && listing.lng != null) {
+            "${listing.lat},${listing.lng}"
+        } else {
+            null
+        }
+        val query = point ?: label
+        val uri = if (point != null) {
+            Uri.parse("google.navigation:q=$point&mode=d")
+        } else {
+            Uri.parse("geo:0,0?q=${Uri.encode(query)}")
+        }
+
+        if (runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }.isSuccess) return
+
+        val web = runCatching {
+            Uri.parse("https://www.google.com/maps/search/?api=1&query=${Uri.encode(query)}")
+        }.getOrNull()
+        if (web != null && runCatching {
+                context.startActivity(Intent(Intent.ACTION_VIEW, web))
+            }.isSuccess
+        ) return
+
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("location", query))
+        Toast.makeText(context, "$label copied", Toast.LENGTH_SHORT).show()
+    }
+
     fun showPhotos(listing: Listing) {
         if (listing.images.isEmpty()) {
             Toast.makeText(context, "No photos available", Toast.LENGTH_SHORT).show()
@@ -232,7 +272,7 @@ fun HomeScreen(
                             workDistanceKm = ComputeDistance.distanceTo(listing, state.prefs.work1),
                             onOpenDetails = { onOpenListing(listing.id) },
                             onCall = { callOwner(listing) },
-                            onLocate = { onOpenListing(listing.id) },
+                            onLocate = { openInMaps(listing) },
                             onPhotos = { showPhotos(listing) },
                             onOpenBrowser = { openInBrowser(listing) },
                         )

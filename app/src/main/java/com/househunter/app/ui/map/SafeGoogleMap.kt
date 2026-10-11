@@ -14,12 +14,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -47,7 +48,9 @@ fun SafeGoogleMap(
     onUnavailable: @Composable (String) -> Unit = { MapUnavailablePanel(it) },
 ) {
     val context = LocalContext.current
-    val reason = remember { MapAvailability.reason(context, com.househunter.app.BuildConfig.MAPS_API_KEY) }
+    // Not `remember`ed: Play services can finish updating while the app is open,
+    // and a cached "unavailable" would keep the map disabled for the whole session.
+    val reason = MapAvailability.reason(context, com.househunter.app.BuildConfig.MAPS_API_KEY)
 
     if (reason != null) {
         onUnavailable(MapAvailability.message(reason))
@@ -58,26 +61,29 @@ fun SafeGoogleMap(
         position = CameraPosition.fromLatLngZoom(center, zoom)
     }
 
-    runCatching {
-        GoogleMap(
-            modifier = modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            properties = MapProperties(isBuildingEnabled = false),
-            uiSettings = MapUiSettings(
-                zoomControlsEnabled = false,
-                mapToolbarEnabled = false,
-                myLocationButtonEnabled = false,
-            ),
-            onMapClick = onMapClick?.let { { pos -> it(pos) } },
-        ) {
-            markers.forEach { (position, title) ->
-                Marker(state = MarkerState(position), title = title)
-            }
-        }
-    }.onFailure {
-        // Surface the same fallback instead of propagating an SDK crash.
-        Box(modifier = modifier.fillMaxSize()) {
-            onUnavailable(MapAvailability.message(MapAvailability.NO_PLAY_SERVICES))
+    // `rememberCameraPositionState` is keyed to this call site, not to `center`, so
+    // the camera used to stay wherever the map first loaded and picking Work 1/2
+    // moved the pin off-screen. Follow the centre whenever it actually changes.
+    LaunchedEffect(center.lat, center.lng, zoom) {
+        runCatching { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(center, zoom)) }
+    }
+
+    // Composable calls must not sit inside runCatching: swapping a composable
+    // subtree for another mid-composition breaks Compose's own bookkeeping. The
+    // availability check above is the real guard, so this renders directly.
+    GoogleMap(
+        modifier = modifier.fillMaxSize(),
+        cameraPositionState = cameraPositionState,
+        properties = MapProperties(isBuildingEnabled = false),
+        uiSettings = MapUiSettings(
+            zoomControlsEnabled = false,
+            mapToolbarEnabled = false,
+            myLocationButtonEnabled = false,
+        ),
+        onMapClick = onMapClick?.let { { pos -> it(pos) } },
+    ) {
+        markers.forEach { (position, title) ->
+            Marker(state = MarkerState(position), title = title)
         }
     }
 }
