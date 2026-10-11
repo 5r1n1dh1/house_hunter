@@ -3,8 +3,6 @@ package com.househunter.app
 import com.househunter.app.data.remote.HttpFetcher
 import com.househunter.app.data.scrape.EmbeddedJson
 import com.househunter.app.data.scrape.Normalizer
-import com.househunter.app.data.scrape.firstDouble
-import com.househunter.app.data.scrape.firstString
 import com.househunter.app.data.scrape.SelectorSet
 import com.househunter.app.data.scrape.SiteConfig
 import com.househunter.app.data.scrape.SiteScraper
@@ -80,8 +78,8 @@ class RazorentApiTest {
     }
 
     @Test
-    fun mapsRentBhkGeoAndOwnerName() {
-        val row = EmbeddedJson.extractArray(payload, "rent")[0]
+    fun mapsRentBhkGeoAndOwnerName() = with(EmbeddedJson) {
+        val row = extractArray(payload, "rent")[0]
         assertEquals(45000.0, row.firstDouble("rent")!!, 0.01)
         assertEquals(2, row.firstDouble("bhk")!!.toInt())
         assertEquals(1109.0, row.firstDouble("area")!!, 0.01)
@@ -93,18 +91,18 @@ class RazorentApiTest {
     }
 
     @Test
-    fun saleListingsCarryNoRentAndAreDropped() {
+    fun saleListingsCarryNoRentAndAreDropped() = with(EmbeddedJson) {
         // A sale listing has salePrice and no rent; the plausibility check on rent is
         // what keeps ₹85 lakh sale prices out of a rental list.
-        val rows = EmbeddedJson.extractArray(payload, "rent")
+        val rows = extractArray(payload, "rent")
         val sale = rows.first { it.getString("title") == "Plot for sale" }
         assertNull(sale.firstDouble("rent"))
         assertEquals(8500000.0, sale.firstDouble("salePrice")!!, 0.01)
     }
 
     @Test
-    fun detailUrlIsBuiltFromTheIdByTemplate() {
-        val row = EmbeddedJson.extractArray(payload, "rent")[0]
+    fun detailUrlIsBuiltFromTheIdByTemplate() = with(EmbeddedJson) {
+        val row = extractArray(payload, "rent")[0]
         val template = "https://razorent.com/property/{id}"
         val built = template.replace("{id}", row.firstString("id")!!)
         assertEquals(
