@@ -20,7 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -123,6 +125,54 @@ fun Pill(
  * URLs (`//assets.nobroker.in/...`), and the image CDNs answer 403 to referer-less
  * requests. [ImageUrl.normalize] and [withListingHeaders] fix both.
  */
+/**
+ * Owner / Agent / Builder, coloured by role.
+ *
+ * This is the single most useful trust signal on a rental card, and both working
+ * sources publish it (NoBroker `ownerName`/`builderName`, MagicBricks' explicit
+ * "Owner"/"Agent" tag plus `landlord.name`), so it is shown rather than guessed.
+ */
+@Composable
+fun ListingOwnerBadge(listing: Listing, modifier: Modifier = Modifier) {
+    val role = listing.ownerType?.takeIf { it.isNotBlank() }
+    val name = listing.ownerName?.takeIf { it.isNotBlank() }
+    if (role == null && name == null) return
+
+    val container = when (role?.lowercase()) {
+        "agent" -> MaterialTheme.colorScheme.secondaryContainer
+        "builder", "developer" -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.primaryContainer
+    }
+    val content = when (role?.lowercase()) {
+        "agent" -> MaterialTheme.colorScheme.onSecondaryContainer
+        "builder", "developer" -> MaterialTheme.colorScheme.onTertiary
+        else -> MaterialTheme.colorScheme.onPrimaryContainer
+    }
+
+    Row(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = if (role?.lowercase() == "agent") Icons.Filled.Badge else Icons.Filled.Person,
+            contentDescription = null,
+            modifier = Modifier.size(12.dp),
+            tint = content,
+        )
+        Text(
+            text = listOfNotNull(role, name?.take(18)).joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = content,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 @Composable
 fun ListingImage(
     url: String?,
@@ -237,6 +287,8 @@ fun ListingCard(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    Spacer(Modifier.height(6.dp))
+                    ListingOwnerBadge(listing)
                 }
             }
 

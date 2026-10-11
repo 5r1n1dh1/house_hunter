@@ -84,6 +84,13 @@ data class Listing(
     val description: String? = null,
     val postedAt: Long? = null,
     val detailLoaded: Boolean = false,
+    /**
+     * Who is advertising: Owner, Agent or Builder. The distinction matters to most
+     * renters, and both NoBroker (`ownerName`) and MagicBricks (`landlord.name` plus
+     * an explicit owner/agent tag) publish it, so it is shown prominently on the card.
+     */
+    val ownerName: String? = null,
+    val ownerType: String? = null,
 )
 
 data class SiteStatus(

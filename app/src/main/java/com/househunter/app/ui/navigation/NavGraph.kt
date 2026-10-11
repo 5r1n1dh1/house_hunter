@@ -114,6 +114,7 @@ fun HouseHunterNavHost(
             DetailScreen(
                 prefs = prefs,
                 onBack = { navController.popBackStack() },
+                onSetWorkLocations = { navController.navigate(Routes.WORKMAP) },
             )
         }
 

@@ -21,6 +21,8 @@ data class JsonLd(
     val name: String? = null,
     val image: String? = null,
     val description: String? = null,
+    /** schema.org `landlord.name` - MagicBricks publishes the owner/agent here. */
+    val owner: String? = null,
 ) {
     companion object {
         val EMPTY = JsonLd()
@@ -61,7 +63,12 @@ data class JsonLd(
                 root.optString("description").takeIf { it.isNotBlank() && it != "null" },
             ).firstOrNull()
 
-            return JsonLd(price, name, image, description)
+            val owner = sequenceOf(
+                root.optJSONObject("landlord")?.optString("name")?.takeIf { it.isNotBlank() },
+                root.optJSONObject("provider")?.optString("name")?.takeIf { it.isNotBlank() },
+            ).firstOrNull()?.trim()
+
+            return JsonLd(price, name, image, description, owner)
         }
 
         private fun JSONObject.optNumber(key: String): Double? {

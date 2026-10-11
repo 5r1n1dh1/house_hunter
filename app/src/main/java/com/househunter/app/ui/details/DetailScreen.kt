@@ -61,19 +61,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.GoogleMap
-import com.google.maps.android.compose.MapProperties
-import com.google.maps.android.compose.MapUiSettings
-import com.google.maps.android.compose.Marker
-import com.google.maps.android.compose.MarkerState
-import com.google.maps.android.compose.rememberCameraPositionState
 import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.UserPrefs
 import com.househunter.app.domain.usecase.ComputeDistance
 import com.househunter.app.ui.components.EmptyState
 import com.househunter.app.ui.components.ListingImage
+import com.househunter.app.ui.components.ListingOwnerBadge
+import com.househunter.app.ui.map.MapUnavailablePanel
+import com.househunter.app.ui.map.SafeGoogleMap
 import com.househunter.app.ui.components.PhotoStrip
 import com.househunter.app.ui.components.Pill
 import com.househunter.app.ui.components.formatArea
@@ -86,6 +82,7 @@ import com.househunter.app.ui.theme.HouseBrush
 fun DetailScreen(
     prefs: UserPrefs,
     onBack: () -> Unit,
+    onSetWorkLocations: () -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel(),
 ) {
     val listing by viewModel.listing.collectAsStateWithLifecycle()
@@ -232,6 +229,7 @@ fun DetailScreen(
                     toWork2 = ComputeDistance.distanceTo(item, prefs.work2),
                     work2Label = prefs.work2?.label ?: "Work 2",
                     onClick = { showMap = true },
+                    onSetWork = onSetWorkLocations,
                 )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -250,6 +248,18 @@ fun DetailScreen(
                 item.description?.takeIf { it.isNotBlank() }?.let { description ->
                     SectionTitle("About this home")
                     Text(text = description, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                if (!item.ownerName.isNullOrBlank() || !item.ownerType.isNullOrBlank()) {
+                    SectionTitle("Advertised by")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ListingOwnerBadge(item)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = item.ownerName.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
 
                 item.phone?.let { phone ->
@@ -331,18 +341,30 @@ private fun DistanceCard(
     toWork2: Double?,
     work2Label: String,
     onClick: () -> Unit,
+    onSetWork: () -> Unit,
 ) {
+    // With no work location set, no distance can exist - prompt instead of showing
+    // a dead "unavailable" line.
     if (toWork1 == null && toWork2 == null) {
         Surface(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = "Distance unavailable — this listing has no location yet.",
-                style = MaterialTheme.typography.bodyMedium,
+            Column(
                 modifier = Modifier.padding(16.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text("Add your work locations", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "Once Work 1 and Work 2 are set, every home shows how far it is from both.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = onSetWork, shape = MaterialTheme.shapes.large) {
+                    Text("Set work locations")
+                }
+            }
         }
         return
     }
@@ -504,20 +526,21 @@ private fun MapBottomSheet(
         val target = listing.lat?.let { LatLng(it, listing.lng ?: 0.0) }
             ?: prefs.work1?.let { LatLng(it.lat, it.lng) }
             ?: LatLng(12.9716, 77.5946)
-        val cameraPositionState = rememberCameraPositionState {
-            position = CameraPosition.fromLatLngZoom(target, 13f)
-        }
-        GoogleMap(
+        // Crash-safe wrapper: a missing API key or Play services renders a panel
+        // instead of taking the process down (the raw GoogleMap used to crash).
+        SafeGoogleMap(
+            center = target,
+            markers = listOfNotNull(
+                listing.lat?.let { LatLng(it, listing.lng ?: 0.0) to listing.title },
+                prefs.work1?.let { LatLng(it.lat, it.lng) to it.label },
+                prefs.work2?.let { LatLng(it.lat, it.lng) to it.label },
+            ),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 380.dp),
-            cameraPositionState = cameraPositionState,
-            properties = MapProperties(isBuildingEnabled = false),
-            uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false),
-        ) {
-            Marker(state = MarkerState(target), title = listing.title)
-            prefs.work1?.let { Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = it.label) }
-            prefs.work2?.let { Marker(state = MarkerState(LatLng(it.lat, it.lng)), title = it.label) }
-        }
+            onUnavailable = { message ->
+                MapUnavailablePanel(message, Modifier.padding(16.dp))
+            },
+        )
     }
 }

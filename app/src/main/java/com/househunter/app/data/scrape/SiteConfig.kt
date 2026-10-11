@@ -15,6 +15,8 @@ data class SelectorSet(
     val phone: String? = null,
     val postedDate: String? = null,
     val furnishing: String? = null,
+    /** Optional element holding "Owner" / "Agent" and the advertiser's name. */
+    val ownerTag: String? = null,
 )
 
 /** Regexes (capture group 1) applied to the detail page. */
@@ -99,6 +101,7 @@ data class SiteConfig(
             selectors.phone?.let { put("phone", it) }
             selectors.postedDate?.let { put("postedDate", it) }
             selectors.furnishing?.let { put("furnishing", it) }
+            selectors.ownerTag?.let { put("ownerTag", it) }
         })
         put("detailFields", JSONObject().apply {
             detailFields.description?.let { put("description", it) }
@@ -159,6 +162,7 @@ data class SiteConfig(
                         phone = s.optStringOrNull("phone"),
                         postedDate = s.optStringOrNull("postedDate"),
                         furnishing = s.optStringOrNull("furnishing"),
+                        ownerTag = s.optStringOrNull("ownerTag"),
                     ),
                     detailFields = DetailFields(
                         description = d?.optStringOrNull("description"),

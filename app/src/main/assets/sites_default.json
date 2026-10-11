@@ -14,7 +14,9 @@
       "detailUrl": "detailUrl",
       "image": "originalImageUrl",
       "furnishing": "furnishingDesc",
-      "locality": "localityTruncated"
+      "locality": "localityTruncated",
+      "owner": "ownerName",
+      "builder": "builderName"
     },
     "selectors": {
       "listContainer": "div[unused]",
@@ -42,7 +44,8 @@
       "areaSqft": "[data-summary='carpet-area'] div.mb-srp__card__summary--value",
       "furnishing": "[data-summary='furnishing'] div.mb-srp__card__summary--value",
       "imageUrl": "img.mb-srp__card__photo__fig--graphic",
-      "postedDate": "div.mb-srp__card__photo__fig--post"
+      "postedDate": "div.mb-srp__card__photo__fig--post",
+      "ownerTag": "div.mb-srp__card__ads--name"
     },
     "pagination": {
       "maxPages": 1

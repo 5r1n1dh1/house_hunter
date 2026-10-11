@@ -203,6 +203,13 @@ class SiteScraper @Inject constructor(
             phone = null,
             detailUrl = detailUrl,
             description = json.firstString("description"),
+            ownerName = json.firstString(map["owner"] ?: "ownerName")
+                ?: json.firstString(map["builder"] ?: "builderName"),
+            ownerType = when {
+                !json.firstString(map["owner"] ?: "ownerName").isNullOrBlank() -> "Owner"
+                !json.firstString(map["builder"] ?: "builderName").isNullOrBlank() -> "Builder"
+                else -> null
+            },
         )
     }
 
@@ -229,6 +236,8 @@ class SiteScraper @Inject constructor(
             images = listOfNotNull(ImageUrl.normalize(image)),
             detailUrl = pageUrl,
             description = jsonLd?.description,
+            ownerName = jsonLd?.owner,
+            ownerType = jsonLd?.owner?.let { "Owner" },
         )
     }
 
@@ -287,6 +296,7 @@ class SiteScraper @Inject constructor(
     ): Listing? {
         val selectors = config.selectors
         val jsonLd = JsonLd.from(card)
+        val ownerTag = ownerTag(card, config)
 
         val detailUrl = Normalizer.resolveUrl(
             baseUrl = config.baseUrl,
@@ -328,7 +338,21 @@ class SiteScraper @Inject constructor(
             phone = Normalizer.sanitizePhone(selectors.phone?.let { text(card, it) }),
             detailUrl = detailUrl,
             description = jsonLd.description,
+            ownerName = jsonLd.owner ?: ownerTag?.second,
+            ownerType = ownerTag?.first ?: jsonLd.owner?.let { "Owner" },
         )
+    }
+
+    /**
+     * MagicBricks renders "Owner: Rakshitha" / "Agent: Chaithanya Gowda" in a single
+     * node, so splitting it yields both the role and the name in one request.
+     */
+    private fun ownerTag(card: Element, config: SiteConfig): Pair<String?, String?>? {
+        val raw = config.selectors.ownerTag?.let { text(card, it) } ?: return null
+        val parts = raw.split(":", limit = 2).map { it.trim() }
+        val role = parts.getOrNull(0)?.takeIf { it.isNotEmpty() && it.length <= 12 }
+        val name = parts.getOrNull(1)?.takeIf { it.isNotEmpty() }
+        return role to name
     }
 
     private fun attr(card: Element, selector: String): String? {
