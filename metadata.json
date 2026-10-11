@@ -1,0 +1,6 @@
+{
+  "name": "House Hunter",
+  "description": "House rental search and aggregation app",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

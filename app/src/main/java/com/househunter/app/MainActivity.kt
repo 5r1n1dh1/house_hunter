@@ -3,6 +3,7 @@ package com.househunter.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import com.househunter.app.data.remote.WebViewFetcher
 import com.househunter.app.ui.navigation.HouseHunterNavHost
 import com.househunter.app.ui.theme.HouseHunterTheme
@@ -21,12 +22,18 @@ class MainActivity : ComponentActivity() {
     lateinit var webViewFetcher: WebViewFetcher
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        webViewFetcher.pageProvider = WebViewFetcher.PageProvider { this }
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        webViewFetcher.pageProvider = WebViewFetcher.PageProvider { this }
         setContent {
             HouseHunterTheme {
                 HouseHunterNavHost()
             }
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        webViewFetcher.pageProvider = null
     }
 }

@@ -2,6 +2,7 @@
 *.iml
 .gradle/
 /local.properties
+.env
 /.idea/
 .DS_Store
 /build

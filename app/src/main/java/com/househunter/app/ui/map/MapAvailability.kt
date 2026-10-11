@@ -26,7 +26,7 @@ object MapAvailability {
 
     /** Null when usable, otherwise a short machine-readable reason. */
     fun reason(context: Context, apiKey: String?): String? {
-        if (apiKey.isNullOrBlank()) return KEY_BLANK
+        if (apiKey.isNullOrBlank() || apiKey == "your-google-maps-api-key" || apiKey.startsWith("your-")) return KEY_BLANK
         return runCatching {
             val status = GoogleApiAvailability.getInstance()
                 .isGooglePlayServicesAvailable(context)
