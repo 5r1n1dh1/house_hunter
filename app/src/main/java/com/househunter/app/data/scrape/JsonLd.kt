@@ -68,7 +68,10 @@ data class JsonLd(
             if (!has(key) || isNull(key)) return null
             return when (val value = get(key)) {
                 is Number -> value.toDouble()
-                is String -> value.toDoubleOrNull()
+                // Prices are often strings: "₹31,500", "45000 /month"
+                is String -> value
+                    .replace(Regex("[^0-9.]"), "")
+                    .toDoubleOrNull()
                 else -> null
             }
         }
