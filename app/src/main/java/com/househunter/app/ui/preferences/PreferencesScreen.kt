@@ -150,6 +150,47 @@ fun PreferencesScreen(
 
 private enum class SheetTarget { STATE, DISTRICT, LOCALITY }
 
+@Composable
+private fun PickerRow(
+    label: String,
+    value: String?,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    OutlinedCard(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column {
+                Text(label, style = MaterialTheme.typography.labelMedium)
+                Text(
+                    text = value ?: "Select",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = if (value != null) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (value != null) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            Text(
+                text = "▾",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocalitySearchSheet(
