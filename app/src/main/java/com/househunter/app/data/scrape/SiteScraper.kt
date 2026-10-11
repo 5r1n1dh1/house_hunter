@@ -127,8 +127,10 @@ class SiteScraper @Inject constructor(
 
         val indexXml = fetchPage(config, indexUrl) ?: return emptyList()
         val targets = LinkedHashSet<String>(source.urls(indexXml))
-        source.discoverSitemaps(indexXml).forEach { mapUrl ->
-            targets += source.urls(fetchPage(config, mapUrl).orEmpty())
+        // A plain loop rather than forEach: fetchPage is a suspend function.
+        for (mapUrl in source.discoverSitemaps(indexXml)) {
+            val mapXml = fetchPage(config, mapUrl)
+            if (!mapXml.isNullOrBlank()) targets += source.urls(mapXml)
         }
         if (targets.isEmpty()) return emptyList()
 
@@ -149,6 +151,51 @@ class SiteScraper @Inject constructor(
             val html = fetchPage(config, propertyUrl) ?: return@mapNotNull null
             listingFromJsonLd(config, prefs, propertyUrl, html)
         }
+    }
+
+    /**
+     * Maps an embedded JSON listing object to a [Listing] using the site's
+     * `jsonFieldMap` (target field -> source field), so NoBroker-style payloads stay
+     * data-driven rather than hard-coded to one site.
+     */
+    private fun listingFromJson(
+        json: org.json.JSONObject,
+        config: SiteConfig,
+        prefs: UserPrefs,
+        pageUrl: String,
+    ): Listing? = with(EmbeddedJson) {
+        val map = config.jsonFieldMap
+        val rent = Normalizer.plausible(json.firstDouble(map["rent"] ?: "rent")) ?: return@with null
+        val title = json.firstString(map["title"] ?: "propertyTitle") ?: return@with null
+        val detailUrl = Normalizer.resolveUrl(config.baseUrl, json.firstString(map["detailUrl"] ?: "detailUrl"))
+            ?: pageUrl
+        val image = json.firstString(map["image"] ?: "originalImageUrl")
+
+        Listing(
+            id = listingId(config.id, detailUrl),
+            siteId = config.id,
+            siteName = config.name,
+            title = title.trim().take(120),
+            rent = rent,
+            deposit = Normalizer.plausible(json.firstDouble("deposit")),
+            maintenance = null,
+            bhk = parseBhkCode(json.firstString(map["type"] ?: "type")) ?: Normalizer.parseBhk(title),
+            areaSqft = json.firstDouble(map["area"] ?: "propertySize"),
+            furnishing = json.firstString(map["furnishing"] ?: "furnishingDesc"),
+            propertyType = null,
+            amenities = emptyList(),
+            locality = json.firstString(map["locality"] ?: "localityTruncated")
+                ?.takeIf { it.isNotBlank() }
+                ?: prefs.locality?.name.orEmpty(),
+            district = prefs.district?.name.orEmpty(),
+            state = prefs.state?.name.orEmpty(),
+            lat = null,
+            lng = null,
+            images = listOfNotNull(ImageUrl.normalize(image)),
+            phone = null,
+            detailUrl = detailUrl,
+            description = json.firstString("description"),
+        )
     }
 
     private fun listingFromJsonLd(

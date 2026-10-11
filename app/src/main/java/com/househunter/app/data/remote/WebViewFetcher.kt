@@ -26,6 +26,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -299,7 +300,6 @@ class WebViewFetcher @Inject constructor(
 
         override fun onJsPrompt(
             view: WebView,
-            url: String,
             message: String,
             defaultValue: String,
             result: JsResult,
@@ -357,9 +357,6 @@ class WebViewFetcher @Inject constructor(
     private fun doDestroy(session: Offscreen) {
         runCatching {
             session.view.stopLoading()
-            // Drop the callbacks first: they capture this fetch's coroutine scope.
-            session.view.webChromeClient = null
-            session.view.webViewClient = null
         }
         runCatching { (session.host?.parent as? ViewGroup)?.removeView(session.host) }
         // Never leaks: no matter how this run ended, the WebView is released exactly once.
