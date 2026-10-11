@@ -24,7 +24,11 @@ class SiteScraper @Inject constructor(
      * 403, housing.com's 406, OLX refusing connections). Injected unconditionally so the
      * engine stays a per-site config choice.
      */
-    private val webViewFetcher: WebViewFetcher,
+    /**
+     * Null only in plain-JVM unit tests (Kotlin default argument); Hilt always injects
+     * a real instance, because Dagger supplies every constructor parameter.
+     */
+    private val webViewFetcher: WebViewFetcher? = null,
 ) {
 
     /** Builds the search URL from the template + current preferences. */
@@ -55,7 +59,7 @@ class SiteScraper @Inject constructor(
     ): String? = engineFor(config).fetch(url = url, referer = config.baseUrl, minIntervalMs = minIntervalMs)
 
     private fun engineFor(config: SiteConfig): PageFetcher =
-        if (config.needsBrowser) webViewFetcher else fetcher
+        if (config.needsBrowser) webViewFetcher ?: fetcher else fetcher
 
     suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> = when (config.mode) {
         SourceMode.JSON -> scrapeJson(config, prefs)
