@@ -42,7 +42,9 @@ class NinetyNineAcresCardTest {
     fun substringSelectorsSurviveAbClassSuffixes() {
         val card = Jsoup.parse(html, "https://www.99acres.com").selectFirst(config.listContainer)
         requireNotNull(card) { "99acres card not matched by the substring selector" }
-        assertEquals("1 BHK Flat for rent", card.selectFirst(config.title)!!.text())
+        // The h2 holds "<strong>1 BHK Flat for rent</strong> in Ashraya Layout",
+        // so the app picks up the locality for free - that is worth asserting.
+        assertEquals("1 BHK Flat for rent in Ashraya Layout", card.selectFirst(config.title)!!.text())
         assertEquals("Dealer �� 6d ago", card.selectFirst(config.ownerTag)!!.text().replace("·", "·"))
     }
 
