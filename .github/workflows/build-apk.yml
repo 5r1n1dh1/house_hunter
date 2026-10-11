@@ -148,6 +148,10 @@ jobs:
           APK=app/build/outputs/apk/release/app-release.apk
           test -f "$APK" || { echo "::error::no APK to publish"; exit 1; }
 
+          # Git identity is required for annotated tags.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           # Next patch version after the highest existing vX.Y.Z tag.
           latest=$(git tag --list 'v*' --sort=-v:refname | head -1 || true)
           if [ -n "$latest" ]; then
