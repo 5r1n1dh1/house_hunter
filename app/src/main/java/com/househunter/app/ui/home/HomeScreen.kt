@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -18,16 +19,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,17 +42,22 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,11 +68,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.househunter.app.domain.model.Listing
+import com.househunter.app.domain.model.OsmPlace
 import com.househunter.app.domain.model.Sort
 import com.househunter.app.domain.usecase.ComputeDistance
 import com.househunter.app.ui.components.EmptyState
 import com.househunter.app.ui.components.ListingCard
 import com.househunter.app.ui.theme.HouseBrush
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +90,9 @@ fun HomeScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var sortMenuOpen by remember { mutableStateOf(false) }
+
+    // Locality picker state
+    var localitySheetOpen by remember { mutableStateOf(false) }
 
     fun callOwner(listing: Listing) {
         val phone = listing.phone ?: return
@@ -187,6 +204,7 @@ fun HomeScreen(
                 work1 = state.prefs.work1?.label,
                 work2 = state.prefs.work2?.label,
                 activeFilterCount = state.prefs.filters.activeCount,
+                onLocalityClick = { localitySheetOpen = true },
             )
 
             Row(
@@ -288,6 +306,25 @@ fun HomeScreen(
             }
         }
     }
+
+    if (localitySheetOpen) {
+        LocalityPickerSheet(
+            currentLocality = state.prefs.locality,
+            currentDistrict = state.prefs.district,
+            currentState = state.prefs.state,
+            onDismiss = { localitySheetOpen = false },
+            onSelect = { locality ->
+                localitySheetOpen = false
+                viewModel.setLocality(locality)
+            },
+            onBrowseAll = { district ->
+                viewModel.browseLocalities(district)
+            },
+            onSearch = { query, districtName, stateName ->
+                viewModel.searchLocalities(query, districtName, stateName)
+            },
+        )
+    }
 }
 
 @Composable
@@ -298,6 +335,7 @@ private fun GradientHeader(
     work1: String?,
     work2: String?,
     activeFilterCount: Int,
+    onLocalityClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -308,12 +346,26 @@ private fun GradientHeader(
             .padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Column {
-            Text(
-                text = locality,
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
-                maxLines = 1,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = locality,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    maxLines = 1,
+                    modifier = Modifier.clickable { onLocalityClick() },
+                )
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    Icons.Filled.LocationOn,
+                    contentDescription = "Change locality",
+                    tint = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .size(18.dp)
+                        .clickable { onLocalityClick() },
+                )
+            }
             if (district.isNotBlank()) {
                 Text(
                     text = district,
@@ -332,6 +384,149 @@ private fun GradientHeader(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LocalityPickerSheet(
+    currentLocality: OsmPlace?,
+    currentDistrict: OsmPlace?,
+    currentState: OsmPlace?,
+    onDismiss: () -> Unit,
+    onSelect: (OsmPlace) -> Unit,
+    onBrowseAll: suspend (OsmPlace) -> List<OsmPlace>,
+    onSearch: suspend (String, String?, String?) -> List<OsmPlace>,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<OsmPlace>>(emptyList()) }
+    var browsed by remember { mutableStateOf<List<OsmPlace>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var browsing by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(
+                "Switch locality",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            currentLocality?.let {
+                Text(
+                    "Current: ${it.name}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
+
+            OutlinedTextField(
+                value = query,
+                onChange = { value ->
+                    query = value
+                    if (value.trim().length < 3) {
+                        results = emptyList()
+                        searching = false
+                        return@OutlinedTextField
+                    }
+                    searching = true
+                    scope.launch {
+                        delay(400)
+                        results = onSearch(value.trim(), currentDistrict?.name, currentState?.name)
+                        searching = false
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Search locality") },
+                supportingText = { Text("Type at least 3 letters, or browse all") },
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                TextButton(
+                    onClick = {
+                        query.trim().takeIf { it.length >= 2 }?.let { typed ->
+                            val place = OsmPlace(
+                                osmId = typed.lowercase().hashCode().toLong(),
+                                name = typed,
+                                adminLevel = 8,
+                            )
+                            onSelect(place)
+                        }
+                    },
+                    enabled = query.trim().length >= 2,
+                ) {
+                    Text("Use \"${query.trim().take(20)}\"")
+                }
+                TextButton(
+                    onClick = {
+                        currentDistrict?.let { district ->
+                            browsing = true
+                            scope.launch {
+                                browsed = onBrowseAll(district)
+                                browsing = false
+                            }
+                        }
+                    },
+                    enabled = currentDistrict != null && !browsing,
+                ) {
+                    Text(if (browsing) "Loading…" else "Browse all")
+                }
+            }
+
+            if (searching || browsing) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                    Text(
+                        if (searching) "Searching…" else "Loading all localities…",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+
+            val shown = results.ifEmpty { browsed }
+            if (shown.isEmpty() && !searching && !browsing && query.trim().length >= 3) {
+                Text(
+                    "No localities found for \"${query.trim()}\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+
+            LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                items(shown, key = { "${it.osmId}:${it.name}" }) { place ->
+                    Text(
+                        text = place.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(place) }
+                            .padding(horizontal = 4.dp, vertical = 14.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun HeaderStat(value: String, label: String) {
     Column {
         Text(

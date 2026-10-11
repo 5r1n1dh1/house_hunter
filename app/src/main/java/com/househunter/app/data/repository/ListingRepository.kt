@@ -9,9 +9,12 @@ import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.SiteStatus
 import com.househunter.app.domain.model.UserPrefs
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,6 +71,16 @@ class ListingRepository @Inject constructor(
     /** Guards re-entrancy: a second refresh while one is running is a no-op. */
     private val refreshLock = Mutex()
 
+    /**
+     * Runs area-geocode enrichment without blocking the refresh return.
+     *
+     * `coroutineScope` waits for **all** children, including `launch`, so an
+     * in-scope `launch` still delayed `refresh()` by the geocoder's 1.1 s
+     * per-request throttle and defeated streaming. A detached scope lets cards
+     * appear first and coordinates arrive a moment later.
+     */
+    private val enrichmentScope = CoroutineScope(SupervisorJob() + io)
+
     suspend fun refresh(prefs: UserPrefs): List<Listing> = withContext(io) {
         // `tryLock`, not a `_refreshing` check-then-set: two concurrent callers
         // could both observe false and both start scraping every site.
@@ -102,12 +115,11 @@ class ListingRepository @Inject constructor(
                 }.awaitAll()
             }
 
-            // Enrichment runs *after* the fan-out has drained, never on the
-            // critical path: the geocoder throttles to one request per second, so
-            // doing it inline delayed every card behind a 1.1s sleep per locality
-            // and defeated streaming entirely. Cards appear first, coordinates
-            // arrive a moment later.
-            enrichCoordinates(prefs)
+            // Enrichment runs in the background, never blocking the refresh return.
+            // The geocoder throttles to one request per second, so doing it inline
+            // delayed every card behind a 1.1s sleep per locality and defeated
+            // streaming entirely. Cards appear first, coordinates arrive a moment later.
+            enrichmentScope.launch { enrichCoordinates(prefs) }
 
             _listings.value
         } finally {

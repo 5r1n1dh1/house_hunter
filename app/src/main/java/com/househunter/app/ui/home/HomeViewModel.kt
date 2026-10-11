@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.househunter.app.data.prefs.PrefsRepository
 import com.househunter.app.data.repository.ListingRepository
+import com.househunter.app.data.repository.LocationRepository
 import com.househunter.app.data.scrape.SiteRegistry
 import com.househunter.app.domain.model.Filters
 import com.househunter.app.domain.model.Listing
+import com.househunter.app.domain.model.OsmPlace
 import com.househunter.app.domain.model.SiteStatus
 import com.househunter.app.domain.model.Sort
 import com.househunter.app.domain.model.UserPrefs
@@ -24,6 +26,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val listingRepository: ListingRepository,
     private val prefsRepository: PrefsRepository,
+    private val locationRepository: LocationRepository,
     private val siteRegistry: SiteRegistry,
 ) : ViewModel() {
 
@@ -89,6 +92,33 @@ class HomeViewModel @Inject constructor(
 
     fun setFilters(filters: Filters) {
         viewModelScope.launch { prefsRepository.setFilters(filters) }
+    }
+
+    /** Districts for the current state, cached in the UI state for the picker sheet. */
+    suspend fun loadDistricts(state: OsmPlace): List<OsmPlace> = locationRepository.districts(state)
+
+    /** Debounced locality search via Nominatim. */
+    suspend fun searchLocalities(
+        query: String,
+        districtName: String?,
+        stateName: String?,
+    ): List<OsmPlace> = locationRepository.searchLocalities(query, districtName, stateName)
+
+    /** Browse all localities in a district via Overpass (slow). */
+    suspend fun browseLocalities(district: OsmPlace): List<OsmPlace> =
+        locationRepository.browseLocalitiesOverpass(district)
+
+    /** Switch locality, persist, and refresh listings. */
+    fun setLocality(locality: OsmPlace) {
+        viewModelScope.launch {
+            val current = prefsRepository.current()
+            prefsRepository.setLocation(
+                state = current.state,
+                district = current.district,
+                locality = locality,
+            )
+            refresh()
+        }
     }
 
     fun dismissError() {
