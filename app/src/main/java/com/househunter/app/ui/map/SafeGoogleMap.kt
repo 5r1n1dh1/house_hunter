@@ -64,7 +64,7 @@ fun SafeGoogleMap(
     // `rememberCameraPositionState` is keyed to this call site, not to `center`, so
     // the camera used to stay wherever the map first loaded and picking Work 1/2
     // moved the pin off-screen. Follow the centre whenever it actually changes.
-    LaunchedEffect(center.lat, center.lng, zoom) {
+    LaunchedEffect(center.latitude, center.longitude, zoom) {
         runCatching { cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(center, zoom)) }
     }
 
