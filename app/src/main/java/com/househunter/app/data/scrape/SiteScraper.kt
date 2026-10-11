@@ -2,6 +2,7 @@ package com.househunter.app.data.scrape
 
 import com.househunter.app.data.remote.HttpFetcher
 import com.househunter.app.data.remote.PageFetcher
+import com.househunter.app.data.remote.WebViewFetcher
 import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.UserPrefs
 import org.jsoup.Jsoup
@@ -18,8 +19,12 @@ import javax.inject.Singleton
 @Singleton
 class SiteScraper @Inject constructor(
     private val fetcher: HttpFetcher,
-    /** Optional; only present when the WebView engine is wired in. */
-    private val webViewFetcher: com.househunter.app.data.remote.PageFetcher? = null,
+    /**
+     * Real-browser engine for CDNs that reject plain HTTP clients (99acres' Cloudflare
+     * 403, housing.com's 406, OLX refusing connections). Injected unconditionally so the
+     * engine stays a per-site config choice.
+     */
+    private val webViewFetcher: WebViewFetcher,
 ) {
 
     /** Builds the search URL from the template + current preferences. */
@@ -50,7 +55,7 @@ class SiteScraper @Inject constructor(
     ): String? = engineFor(config).fetch(url = url, referer = config.baseUrl, minIntervalMs = minIntervalMs)
 
     private fun engineFor(config: SiteConfig): PageFetcher =
-        if (config.needsBrowser) webViewFetcher ?: fetcher
+        if (config.needsBrowser) webViewFetcher else fetcher
 
     suspend fun scrape(config: SiteConfig, prefs: UserPrefs): List<Listing> = when (config.mode) {
         SourceMode.JSON -> scrapeJson(config, prefs)
@@ -131,8 +136,13 @@ class SiteScraper @Inject constructor(
             ?: prefs.district?.name?.substringAfterLast(' ')?.lowercase()
             ?: prefs.state?.name?.lowercase()
             .orEmpty()
-        val filtered = source
-            .filter(targets.toList(), city = city, locality = prefs.locality?.name)
+        val locality = prefs.locality?.name
+
+        // Stanza has no residence in every locality (Sahakara Nagar has none), so a
+        // locality miss falls back to the whole city rather than showing nothing.
+        val byLocality = source.filter(targets.toList(), city = city, locality = locality)
+        val filtered = byLocality
+            .ifEmpty { source.filter(targets.toList(), city = city) }
             .take(MAX_SITEMAP_URLS)
 
         return filtered.mapNotNull { propertyUrl ->
@@ -150,6 +160,8 @@ class SiteScraper @Inject constructor(
         val jsonLd = runCatching { JsonLd.parse(html) }.getOrNull()
         val rent = Normalizer.plausible(jsonLd?.price) ?: return null
         val title = jsonLd?.name ?: jsonLd?.description?.take(60) ?: return null
+        // Stanza-style pages put the property photo in OpenGraph, not in the JSON-LD.
+        val image = jsonLd?.image ?: Normalizer.capture(OG_IMAGE_REGEX, html)
         return Listing(
             id = listingId(config.id, pageUrl),
             siteId = config.id,
@@ -159,7 +171,7 @@ class SiteScraper @Inject constructor(
             locality = prefs.locality?.name.orEmpty(),
             district = prefs.district?.name.orEmpty(),
             state = prefs.state?.name.orEmpty(),
-            images = listOfNotNull(ImageUrl.normalize(jsonLd?.image)),
+            images = listOfNotNull(ImageUrl.normalize(image)),
             detailUrl = pageUrl,
             description = jsonLd?.description,
         )
@@ -292,3 +304,7 @@ class SiteScraper @Inject constructor(
 
 /** Sitemap sources return every property on the site; cap the work per refresh. */
 private const val MAX_SITEMAP_URLS = 60
+
+/** OpenGraph image, used when the JSON-LD carries no image (Stanza pages). */
+private const val OG_IMAGE_REGEX =
+    "<meta[^>]+(?:property|name)=\"og:image\"[^>]+content=\"([^\"]+)\""

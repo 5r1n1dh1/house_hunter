@@ -9,6 +9,26 @@ import org.junit.Test
 class NormalizerTest {
 
     @Test
+    fun rejectsImplausibleRentsThatCausedBogusCards() {
+        // Regression: a site selector matched a floor/bedroom count, which produced
+        // cards priced "1/month" and "2/month".
+        assertNull(Normalizer.parseRent("1"))
+        assertNull(Normalizer.parseRent("2"))
+        assertNull(Normalizer.parseRent("₹1"))
+        assertNull(Normalizer.parseRent("₹2/month"))
+        assertNull(Normalizer.parseRent("3 BHK"))
+        assertNull(Normalizer.parseRent("0"))
+    }
+
+    @Test
+    fun prefersTheCurrencyMarkedNumberOverEarlierNumbers() {
+        assertEquals(24000.0, Normalizer.parseRent("Floor 1, 3 BHK, ₹24,000")!!, 0.01)
+        assertEquals(45000.0, Normalizer.parseRent("2nd floor, 1850 sqft, Rs. 45,000")!!, 0.01)
+        assertEquals(180000.0, Normalizer.parseRent("1.8 Lakh")!!, 0.01)
+        assertEquals(45000.0, Normalizer.parseRent("45000")!!, 0.01)
+    }
+
+    @Test
     fun parsesIndianRupeeFormats() {
         assertEquals(18000.0, Normalizer.parseRent("₹18,000")!!, 0.01)
         assertEquals(25000.0, Normalizer.parseRent("Rs. 25,000 /month")!!, 0.01)

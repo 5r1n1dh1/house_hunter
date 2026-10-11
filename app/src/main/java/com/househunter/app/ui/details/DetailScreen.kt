@@ -61,7 +61,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
@@ -74,6 +73,8 @@ import com.househunter.app.domain.model.Listing
 import com.househunter.app.domain.model.UserPrefs
 import com.househunter.app.domain.usecase.ComputeDistance
 import com.househunter.app.ui.components.EmptyState
+import com.househunter.app.ui.components.ListingImage
+import com.househunter.app.ui.components.PhotoStrip
 import com.househunter.app.ui.components.Pill
 import com.househunter.app.ui.components.formatArea
 import com.househunter.app.ui.components.formatKm
@@ -216,6 +217,15 @@ fun DetailScreen(
 
                 Text(text = item.title, style = MaterialTheme.typography.bodyLarge)
 
+                if (item.images.size > 1) {
+                    PhotoStrip(
+                        images = item.images,
+                        detailUrl = item.detailUrl,
+                        onImageClick = { },
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                }
+
                 DistanceCard(
                     toWork1 = ComputeDistance.distanceTo(item, prefs.work1),
                     work1Label = prefs.work1?.label ?: "Work 1",
@@ -289,11 +299,11 @@ private fun HeroImage(item: Listing) {
         contentAlignment = Alignment.Center,
     ) {
         if (image != null) {
-            AsyncImage(
-                model = image,
+            ListingImage(
+                url = image,
+                detailUrl = item.detailUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             )
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

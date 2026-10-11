@@ -48,11 +48,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.househunter.app.data.scrape.ImageUrl
+import com.househunter.app.ui.images.withListingHeaders
 import com.househunter.app.domain.model.Listing
 import java.text.NumberFormat
 import java.util.Locale
@@ -112,6 +116,49 @@ fun Pill(
     )
 }
 
+/**
+ * Listing photo with the Referer its origin expects.
+ *
+ * Two bugs hid behind plain `AsyncImage(url)`: NoBroker returns protocol-relative
+ * URLs (`//assets.nobroker.in/...`), and the image CDNs answer 403 to referer-less
+ * requests. [ImageUrl.normalize] and [withListingHeaders] fix both.
+ */
+@Composable
+fun ListingImage(
+    url: String?,
+    detailUrl: String?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Crop,
+) {
+    val context = LocalContext.current
+    val normalized = remember(url) { ImageUrl.normalize(url) }
+    if (normalized == null) {
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Filled.Home,
+                contentDescription = contentDescription,
+                tint = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        return
+    }
+    val request = remember(normalized, detailUrl) {
+        ImageRequest.Builder(context)
+            .data(normalized)
+            .withListingHeaders(ImageUrl.baseRefererFor(detailUrl))
+            .crossfade(true)
+            .build()
+    }
+    AsyncImage(
+        model = request,
+        contentDescription = contentDescription,
+        contentScale = contentScale,
+        modifier = modifier,
+    )
+}
+
 @Composable
 fun ListingCard(
     listing: Listing,
@@ -140,24 +187,14 @@ fun ListingCard(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val image = listing.images.firstOrNull()
-                    if (image != null) {
-                        AsyncImage(
-                            model = image,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .size(78.dp)
-                                .clip(MaterialTheme.shapes.medium),
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Filled.Home,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(30.dp),
-                        )
-                    }
+                    ListingImage(
+                        url = listing.images.firstOrNull(),
+                        detailUrl = listing.detailUrl,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(78.dp)
+                            .clip(MaterialTheme.shapes.medium),
+                    )
                 }
 
                 Spacer(Modifier.width(12.dp))
@@ -375,16 +412,21 @@ fun <T> PickerSheet(
 }
 
 @Composable
-fun PhotoStrip(images: List<String>, onImageClick: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun PhotoStrip(
+    images: List<String>,
+    detailUrl: String? = null,
+    onImageClick: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
         itemsIndexed(images) { index, url ->
-            AsyncImage(
-                model = url,
+            ListingImage(
+                url = url,
+                detailUrl = detailUrl,
                 contentDescription = "Photo ${index + 1}",
-                contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .size(150.dp)
                     .clip(MaterialTheme.shapes.medium)

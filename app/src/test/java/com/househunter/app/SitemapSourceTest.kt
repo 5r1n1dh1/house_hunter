@@ -165,7 +165,8 @@ class SitemapSourceTest {
     fun localityThatMatchesNothingReturnsEmptyList() {
         val urls = source.urls(residenceUrlset)
 
-        // "Baner" exists under Pune but not Bengaluru, and never under Delhi.
+        // "Baner" is a real Pune locality but must not leak into a Bengaluru search, and the
+        // Bengaluru locality must not leak into Delhi or into a longer nearby slug.
         assertEquals(emptyList<String>(), source.filter(urls, "bengaluru", "baner"))
         assertEquals(emptyList<String>(), source.filter(urls, "delhi", "banashankari"))
         assertEquals(emptyList<String>(), source.filter(urls, "bengaluru", "koramangala-extension"))

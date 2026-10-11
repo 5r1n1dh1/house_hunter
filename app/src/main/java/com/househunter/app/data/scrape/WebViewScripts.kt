@@ -32,8 +32,7 @@ object WebViewScripts {
     fun outerHtmlScript(): String =
         "(function () {\n" +
             "  try {\n" +
-            "    var root = document.documentElement;\n" +
-            "    return root ? root.outerHTML : '';\n" +
+            "    return document.documentElement ? document.documentElement.outerHTML : '';\n" +
             "  } catch (e) {\n" +
             "    return '';\n" +
             "  }\n" +

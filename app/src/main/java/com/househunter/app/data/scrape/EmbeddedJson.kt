@@ -37,19 +37,68 @@ object EmbeddedJson {
      */
     fun extractArray(html: String, anchorKey: String): List<JSONObject> {
         if (html.isEmpty() || anchorKey.isBlank()) return emptyList()
-        val needle = "\"$anchorKey\""
-        val anchor = html.indexOf(needle)
-        if (anchor < 0) return emptyList()
 
-        // Spans are ordered by their opening bracket, so the outermost candidate that wraps
-        // the anchor is tried first; that is the listing array, not an array *inside* a card.
+        val fromDocument = extractFrom(html, anchorKey)
+        if (fromDocument.isNotEmpty()) return fromDocument
+
+        // A stray quote in the surrounding markup (`5" pipe`) desynchronises the document-wide
+        // scan. Retry inside each <script> body, which is where the payload actually lives.
+        for (body in scriptBodies(html)) {
+            val objects = extractFrom(body, anchorKey)
+            if (objects.isNotEmpty()) return objects
+        }
+        return emptyList()
+    }
+
+    private fun extractFrom(html: String, anchorKey: String): List<JSONObject> {
+        val needle = "\"$anchorKey\""
+        val anchors = occurrenceIndices(html, needle)
+        if (anchors.isEmpty()) return emptyList()
+
+        // Spans are ordered by opening offset and anchors by position, so one forward-moving
+        // cursor lines the two up: the first anchor at or after a span's `[` must be the one
+        // the span is a candidate for. An anchor mentioned in a nav menu earlier on the page
+        // therefore never hides the listing array that follows it.
+        var cursor = 0
         for (span in arraySpans(html)) {
-            if (span.first > anchor) break
+            while (cursor < anchors.size && anchors[cursor] < span.first) cursor++
+            val anchor = anchors.getOrNull(cursor) ?: break
             if (anchor + needle.length > span.last) continue
             val objects = parseObjects(html.substring(span.first, span.last + 1))
             if (objects.any { it.has(anchorKey) }) return objects
         }
         return emptyList()
+    }
+
+    /** Offsets of every non-overlapping occurrence of [needle], ascending. */
+    private fun occurrenceIndices(html: String, needle: String): List<Int> {
+        val indices = ArrayList<Int>()
+        var from = 0
+        while (true) {
+            val at = html.indexOf(needle, from)
+            if (at < 0) return indices
+            indices.add(at)
+            from = at + needle.length
+        }
+    }
+
+    /** Text content of each `<script>` element; script tags without a close are still used. */
+    private fun scriptBodies(html: String): List<String> {
+        val bodies = ArrayList<String>()
+        var from = 0
+        while (true) {
+            val open = html.indexOf("<script", from, ignoreCase = true)
+            if (open < 0) return bodies
+            val bodyStart = html.indexOf('>', open)
+            if (bodyStart < 0) return bodies
+            val close = html.indexOf("</script", bodyStart, ignoreCase = true)
+            if (close < 0) {
+                bodies.add(html.substring(bodyStart + 1))
+                return bodies
+            }
+            bodies.add(html.substring(bodyStart + 1, close))
+            from = close + 1
+        }
     }
 
     /**
