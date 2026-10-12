@@ -121,11 +121,17 @@ jobs:
           # Scope to release: the earlier `lintDebug` step leaves a debug merged
           # manifest behind, and that one legitimately holds the placeholder
           # because `.env` is only written after the tests run.
-          MERGED=$(find app/build/intermediates -path '*release*merged_manifest*' \
+          #
+          # The path is `merged_manifest/release/...` - note the order. An earlier
+          # version used '*release*merged_manifest*', which can never match, so the
+          # check skipped silently and reported green while verifying nothing.
+          # A guard that cannot find its subject must fail, never skip.
+          MERGED=$(find app/build/intermediates -path '*merged_manifest*release*' \
             -name AndroidManifest.xml 2>/dev/null | head -1 || true)
           if [ -z "$MERGED" ]; then
-            echo "::warning::no release merged manifest found; skipping the Maps key check"
-            exit 0
+            echo "::error::no release merged manifest found - Maps key check could not run"
+            find app/build/intermediates -name AndroidManifest.xml | head -20
+            exit 1
           fi
           echo "checking $MERGED"
           if grep -q 'your-google-maps-api-key' "$MERGED"; then
