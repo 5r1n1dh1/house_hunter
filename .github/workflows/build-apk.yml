@@ -199,24 +199,29 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Next patch version after the highest existing vX.Y.Z tag.
-          latest=$(git tag --list 'v*' --sort=-v:refname | head -1 || true)
+          # Ask the remote rather than the local clone: `actions/checkout` does not
+          # fetch tags, so `git tag --list` was always empty, every run recomputed
+          # v1.0.0, hit the "already exists" branch, and silently published nothing.
+          latest=$(git ls-remote --tags --refs origin 'v*' \
+            | awk -F'refs/tags/' '{print $2}' | sort -V | tail -1 || true)
           if [ -n "$latest" ]; then
             base="${latest#v}"
             major="${base%%.*}"; rest="${base#*.}"
             minor="${rest%%.*}"; patch="${rest##*.}"
             TAG="v$major.$minor.$((patch + 1))"
+            echo "Latest release tag is $latest; publishing $TAG"
           else
             TAG="v1.0.0"
+            echo "No existing release tags; publishing $TAG"
           fi
 
           # Re-runs must not collide with a tag this job already created.
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists; refreshing its release instead."
-          else
-            git tag -a "$TAG" -m "Release $TAG"
-            git push origin "$TAG"
+            echo "::error::tag $TAG already exists but was not the highest tag - refusing to overwrite"
+            exit 1
           fi
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
 
           NOTES=$(cat <<EOF
           Install: download \`app-release.apk\` and open it (enable "install from unknown sources" if prompted).
@@ -226,7 +231,13 @@ jobs:
           - Distances are marked \`~\` when the site only publishes an area, not an exact pin
           EOF
           )
-          gh release create "$TAG" "$APK" \
+          # `set -e` already aborts if both attempts fail, but the previous form
+          # printed "Published" from the fallback path regardless of what actually
+          # happened, so a silent no-op still looked like a success.
+          if ! gh release create "$TAG" "$APK" \
             --title "House Hunter $TAG" \
-            --notes "$NOTES" || gh release upload "$TAG" "$APK" --clobber
-          echo "Published $TAG"
+            --notes "$NOTES" 2>/dev/null; then
+            echo "Release $TAG exists; replacing its APK"
+            gh release upload "$TAG" "$APK" --clobber
+          fi
+          echo "Published $TAG -> $(gh release view "$TAG" --json url --jq .url)"
