@@ -58,6 +58,7 @@ class PrefsRepository @Inject constructor(
         val ONBOARDED = booleanPreferencesKey("onboarded")
         val CUSTOM_SITES = stringPreferencesKey("custom_sites")
         val SITE_OVERRIDES = stringPreferencesKey("site_overrides")
+        val FAVOURITES = stringPreferencesKey("favourite_ids")
     }
 
     private val preferences: Flow<Preferences> = context.dataStore.data
@@ -84,6 +85,18 @@ class PrefsRepository @Inject constructor(
             sort = p[Keys.SORT]?.let { runCatching { Sort.valueOf(it) }.getOrNull() } ?: Sort.PRICE_ASC,
             onboarded = p[Keys.ONBOARDED] ?: false,
         )
+    }
+
+    /**
+     * Favourited listing ids, newest first.
+     *
+     * Only the **ids** are stored, never listing content. The app's rule is that
+     * nothing scraped is persisted, so a favourite is a pointer; the listing is
+     * re-fetched from its source and the entry self-heals to a placeholder if the
+     * source has since dropped it.
+     */
+    val favourites: Flow<Set<String>> = preferences.map { raw ->
+        decodeFavourites(raw)
     }
 
     val customSites: Flow<List<SiteConfig>> = preferences.map { decodeSites(it[Keys.CUSTOM_SITES]) }
@@ -128,6 +141,14 @@ class PrefsRepository @Inject constructor(
 
     suspend fun setSort(sort: Sort) {
         context.dataStore.edit { it[Keys.SORT] = sort.name }
+    }
+
+    suspend fun toggleFavourite(id: String) {
+        context.dataStore.edit { p ->
+            val current = decodeFavourites(p[Keys.FAVOURITES]).toMutableSet()
+            if (!current.add(id)) current.remove(id)
+            p[Keys.FAVOURITES] = JSONArray(current.toList()).toString()
+        }
     }
 
     suspend fun upsertSite(site: SiteConfig) {
@@ -213,6 +234,15 @@ class PrefsRepository @Inject constructor(
             val array = JSONArray(raw)
             (0 until array.length()).mapNotNull { SiteConfig.fromJson(array.getJSONObject(it)) }
         }.getOrDefault(emptyList())
+    }
+
+    /** Tolerant of a corrupt value: a bad blob must not break app start. */
+    private fun decodeFavourites(raw: String?): Set<String> {
+        if (raw.isNullOrBlank()) return emptySet()
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }.toSet()
+        }.getOrDefault(emptySet())
     }
 
     private fun decodeOverrides(raw: String?): Map<String, Boolean> {

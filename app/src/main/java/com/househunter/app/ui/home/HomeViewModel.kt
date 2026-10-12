@@ -37,14 +37,23 @@ class HomeViewModel @Inject constructor(
         val refreshing: Boolean = false,
         val enabledSites: Int = 0,
         val error: String? = null,
+        /** Ids of favourited listings; the card heart reads this. */
+        val favouriteIds: Set<String> = emptySet(),
     )
 
-    private data class Meta(val enabledSites: Int = 0, val error: String? = null)
+    private data class Meta(
+        val enabledSites: Int = 0,
+        val error: String? = null,
+        val favouriteIds: Set<String> = emptySet(),
+    )
 
     private val enabledSiteCount = MutableStateFlow(0)
     private val error = MutableStateFlow<String?>(null)
-    private val meta: StateFlow<Meta> = combine(enabledSiteCount, error) { count, err ->
-        Meta(count, err)
+    private val meta: StateFlow<Meta> = combine(
+        combine(enabledSiteCount, error) { count, err -> count to err },
+        prefsRepository.favourites,
+    ) { (count, err), favourites ->
+        Meta(count, err, favourites)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, Meta())
 
     val uiState: StateFlow<UiState> = combine(
@@ -67,6 +76,7 @@ class HomeViewModel @Inject constructor(
             refreshing = refreshing,
             enabledSites = info.enabledSites,
             error = info.error,
+            favouriteIds = info.favouriteIds,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
@@ -119,6 +129,11 @@ class HomeViewModel @Inject constructor(
             )
             refresh()
         }
+    }
+
+    /** Optimistic heart toggle; DataStore emits and the card follows. */
+    fun toggleFavourite(id: String) {
+        viewModelScope.launch { prefsRepository.toggleFavourite(id) }
     }
 
     fun dismissError() {

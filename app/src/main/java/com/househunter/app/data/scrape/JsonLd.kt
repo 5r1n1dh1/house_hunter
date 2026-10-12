@@ -23,6 +23,8 @@ data class JsonLd(
     val description: String? = null,
     /** schema.org `landlord.name` - MagicBricks publishes the owner/agent here. */
     val owner: String? = null,
+    /** schema.org `datePosted`, kept as the raw string; units vary by site. */
+    val datePosted: String? = null,
 ) {
     companion object {
         val EMPTY = JsonLd()
@@ -68,7 +70,16 @@ data class JsonLd(
                 root.optJSONObject("provider")?.optString("name")?.takeIf { it.isNotBlank() },
             ).firstOrNull()?.trim()
 
-            return JsonLd(price, name, image, description, owner)
+            // schema.org puts datePosted on the Residence node as well as the
+            // wrapping action, so both are checked before giving up.
+            val datePosted = sequenceOf(
+                objectNode?.optString("datePosted")?.takeIf { it.isNotBlank() && it != "null" },
+                root.optString("datePosted").takeIf { it.isNotBlank() && it != "null" },
+                root.optJSONObject("object")?.optString("datePosted")
+                    ?.takeIf { it.isNotBlank() && it != "null" },
+            ).firstOrNull()
+
+            return JsonLd(price, name, image, description, owner, datePosted)
         }
 
         private fun JSONObject.optNumber(key: String): Double? {

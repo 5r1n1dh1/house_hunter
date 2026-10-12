@@ -23,6 +23,7 @@ import com.househunter.app.data.prefs.PrefsRepository
 import com.househunter.app.domain.model.UserPrefs
 import com.househunter.app.ui.addsite.AddSiteScreen
 import com.househunter.app.ui.details.DetailScreen
+import com.househunter.app.ui.favourites.FavouritesScreen
 import com.househunter.app.ui.home.FilterSheet
 import com.househunter.app.ui.home.HomeScreen
 import com.househunter.app.ui.home.HomeViewModel
@@ -40,6 +41,7 @@ object Routes {
     const val WORKMAP = "workmap"
     const val HOME = "home"
     const val SITES = "sites"
+    const val FAVOURITES = "favourites"
     const val ADD_SITE = "addSite"
     const val DETAILS = "details/{listingId}"
 
@@ -103,6 +105,7 @@ fun HouseHunterNavHost(
                 onOpenSites = { navController.navigate(Routes.SITES) },
                 onOpenWorkMap = { navController.navigate(Routes.WORKMAP) },
                 onOpenFilters = { filterOpen.value = true },
+                onOpenFavourites = { navController.navigate(Routes.FAVOURITES) },
                 viewModel = homeViewModel,
             )
         }
@@ -122,6 +125,13 @@ fun HouseHunterNavHost(
             SitesScreen(
                 onBack = { navController.popBackStack() },
                 onAddSite = { navController.navigate(Routes.ADD_SITE) },
+            )
+        }
+
+        composable(Routes.FAVOURITES) {
+            FavouritesScreen(
+                onBack = { navController.popBackStack() },
+                onOpenListing = { id -> navController.navigate(Routes.details(id)) },
             )
         }
 

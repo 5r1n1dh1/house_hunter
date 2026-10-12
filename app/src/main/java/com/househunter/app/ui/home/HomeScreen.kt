@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -84,6 +85,7 @@ fun HomeScreen(
     onOpenSites: () -> Unit,
     onOpenWorkMap: () -> Unit,
     onOpenFilters: () -> Unit,
+    onOpenFavourites: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,12 +96,30 @@ fun HomeScreen(
     // Locality picker state
     var localitySheetOpen by remember { mutableStateOf(false) }
 
-    fun callOwner(listing: Listing) {
-        val phone = listing.phone ?: return
-        runCatching {
-            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
-        }.onFailure {
-            Toast.makeText(context, "No dialer available", Toast.LENGTH_SHORT).show()
+    /**
+     * Contact the owner.
+     *
+     * The old button reported "no phone number on this listing" on every card
+     * because none of the six sources publish a dialable number in search markup:
+     * NoBroker gates it behind login, Razorent is chat-only, and a loose 10-digit
+     * match on bengaluru.rent returns Google AdSense slot IDs. So when a phone is
+     * genuinely present (some detail pages expose one) it dials; otherwise it
+     * hands off to the listing, which carries the site's real contact route.
+     */
+    fun contactOwner(listing: Listing) {
+        val phone = listing.phone?.takeIf { it.length in 10..13 }
+        if (phone != null) {
+            val dialed = runCatching {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+            }.isSuccess
+            if (dialed) return
+        }
+        val uri = runCatching { Uri.parse(listing.detailUrl) }.getOrNull()
+        val opened = uri != null && runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        }.isSuccess
+        if (!opened) {
+            Toast.makeText(context, "Open the listing to contact the owner", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -183,6 +203,9 @@ fun HomeScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 actions = {
+                    IconButton(onClick = onOpenFavourites) {
+                        Icon(Icons.Filled.Favorite, contentDescription = "Favourites")
+                    }
                     IconButton(onClick = onOpenWorkMap) {
                         Icon(Icons.Filled.Work, contentDescription = "Work locations")
                     }
@@ -295,8 +318,11 @@ fun HomeScreen(
                         ListingCard(
                             listing = listing,
                             workDistanceKm = ComputeDistance.distanceTo(listing, state.prefs.work1),
+                            workDistanceKm2 = ComputeDistance.distanceTo(listing, state.prefs.work2),
+                            isFavourite = listing.id in state.favouriteIds,
+                            onToggleFavourite = { viewModel.toggleFavourite(listing.id) },
                             onOpenDetails = { onOpenListing(listing.id) },
-                            onCall = { callOwner(listing) },
+                            onContact = { contactOwner(listing) },
                             onLocate = { openInMaps(listing) },
                             onPhotos = { showPhotos(listing) },
                             onOpenBrowser = { openInBrowser(listing) },

@@ -21,11 +21,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Badge
-import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.househunter.app.data.scrape.ImageUrl
+import com.househunter.app.data.scrape.Normalizer
 import com.househunter.app.ui.images.withListingHeaders
 import com.househunter.app.domain.model.Listing
 import java.text.NumberFormat
@@ -233,11 +236,21 @@ fun ListingCard(
     listing: Listing,
     workDistanceKm: Double?,
     onOpenDetails: () -> Unit,
-    onCall: () -> Unit,
+    onContact: () -> Unit,
     onLocate: () -> Unit,
     onPhotos: () -> Unit,
     onOpenBrowser: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Distance to the second work location.
+     *
+     * Work 2 used to be captured only in the header, so a card never showed it.
+     * Both are rendered, each labelled, because "12 km away" is ambiguous when
+     * two offices are set.
+     */
+    workDistanceKm2: Double? = null,
+    isFavourite: Boolean = false,
+    onToggleFavourite: () -> Unit = {},
 ) {
     Card(
         onClick = onOpenDetails,
@@ -279,6 +292,15 @@ fun ListingCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listing.bhk?.let { Pill("${it} BHK") }
                         formatArea(listing.areaSqft)?.let { Pill(it) }
+                        // Omitted when the portal publishes no date, rather than
+                        // claiming a freshness the app cannot support.
+                        Normalizer.relativeAge(listing.postedAt)?.let { age ->
+                            Pill(
+                                text = age,
+                                container = MaterialTheme.colorScheme.tertiaryContainer,
+                                content = MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
+                        }
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
@@ -322,19 +344,38 @@ fun ListingCard(
                     container = MaterialTheme.colorScheme.secondaryContainer,
                     content = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
+                // "~" marks an area-centroid estimate: the portal gave a
+                // neighbourhood, not a pin, so the number is honest but rough.
                 if (workDistanceKm != null) {
                     Spacer(Modifier.width(8.dp))
-                    // "~" marks an area-centroid estimate: the portal gave a
-                    // neighbourhood, not a pin, so the number is honest but rough.
                     Pill(
                         text = (if (listing.hasRealLocation) "" else "~") +
-                            "${formatKm(workDistanceKm)} away",
+                            "${formatKm(workDistanceKm)} · W1",
                         container = MaterialTheme.colorScheme.primaryContainer,
                         content = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
+                if (workDistanceKm2 != null) {
+                    Spacer(Modifier.width(6.dp))
+                    Pill(
+                        text = (if (listing.hasRealLocation) "" else "~") +
+                            "${formatKm(workDistanceKm2)} · W2",
+                        container = MaterialTheme.colorScheme.secondaryContainer,
+                        content = MaterialTheme.colorScheme.onSecondaryContainer,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
-                IconActionButton(Icons.Filled.Call, "Call owner", onCall, !listing.phone.isNullOrBlank())
+                // No source publishes a dialable number in listing markup - NoBroker
+                // gates it behind login, Razorent is chat-only, and on bengaluru.rent
+                // a loose 10-digit match returns Google AdSense slot IDs, which
+                // would ring an advertiser. So there is no disabled "call" button
+                // lying about capability; the action opens the site's own contact.
+                IconActionButton(Icons.Filled.Chat, "Contact owner", onContact)
+                IconActionButton(
+                    if (isFavourite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    if (isFavourite) "Remove from favourites" else "Add to favourites",
+                    onToggleFavourite,
+                )
                 IconActionButton(
                     Icons.Filled.Place,
                     if (listing.hasRealLocation) "Locate on map" else "No exact location published",

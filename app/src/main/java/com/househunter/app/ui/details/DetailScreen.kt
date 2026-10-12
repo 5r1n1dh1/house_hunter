@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bed
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.OpenInNew
@@ -139,27 +140,32 @@ fun DetailScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
+                        // Dials only when the listing really carries a number.
+                        // None of the six sources publish one in search markup, so
+                        // this usually hands off to the listing's own contact
+                        // (chat, WhatsApp or a masked number) instead of toasting
+                        // "no phone number" on every single property.
                         FilledTonalButton(
                             onClick = {
-                                val phone = item.phone
-                                if (phone == null) {
-                                    Toast.makeText(
-                                        context,
-                                        "No phone number on this listing",
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    runCatching {
+                                val phone = item.phone?.takeIf { it.length in 10..13 }
+                                if (phone != null) {
+                                    val dialed = runCatching {
                                         context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
-                                    }
+                                    }.isSuccess
+                                    if (dialed) return@FilledTonalButton
                                 }
+                                openInBrowser(item)
                             },
                             modifier = Modifier.weight(1f),
                             shape = MaterialTheme.shapes.large,
                         ) {
-                            Icon(Icons.Filled.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(
+                                if (item.phone != null) Icons.Filled.Call else Icons.Filled.Chat,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
                             Spacer(Modifier.width(8.dp))
-                            Text("Call owner")
+                            Text(if (item.phone != null) "Call owner" else "Contact owner")
                         }
                         Button(
                             onClick = { openInBrowser(item) },

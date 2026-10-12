@@ -83,6 +83,69 @@ object Normalizer {
         return digits
     }
 
+    /**
+     * Any published "when was this posted" value -> epoch millis, or null.
+     *
+     * Sources disagree on every axis: NoBroker sends epoch **milliseconds**
+     * (`creationDate: 1526802196000`), Razorent sends ISO-8601 with a `Z` suffix
+     * (`createdAt: 2026-10-11T12:12:33.585Z`), and card-based portals send loose
+     * text. The unit is inferred from magnitude - a 13-digit value is millis, a
+     * 10-digit one is seconds - because NoBroker and Razorent are both consumed by
+     * the same JSON-mode parser and guessing wrong would date listings to 1970 or
+     * far future, which the age chip would then display as nonsense.
+     */
+    fun parsePostedAt(raw: String?): Long? {
+        if (raw.isNullOrBlank()) return null
+        val text = raw.trim()
+
+        // Purely numeric: epoch in seconds or milliseconds.
+        if (text.matches(Regex("\\d{9,14}"))) {
+            val value = text.toLongOrNull() ?: return null
+            return when {
+                value >= 100_000_000_000L -> value          // millis
+                value >= 1_000_000_000L -> value * 1_000L   // seconds
+                else -> null
+            }
+        }
+
+        // ISO-8601 / RFC-1123, which covers Razorent and sitemap <lastmod>.
+        runCatching {
+            return java.time.Instant.parse(text).toEpochMilli()
+        }
+        runCatching {
+            return java.time.ZonedDateTime.parse(
+                text,
+                java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME,
+            ).toInstant().toEpochMilli()
+        }
+        runCatching {
+            return java.time.LocalDateTime.parse(
+                text,
+                java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME,
+            ).toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+        }
+        return null
+    }
+
+    /**
+     * Human-friendly age of a listing: "just now", "3h ago", "2d ago", "5w ago".
+     *
+     * Returns null when [postedAt] is unknown so callers can omit the chip rather
+     * than claim a freshness they cannot support. Future timestamps (clock skew
+     * between portal and device) clamp to "just now" rather than "-2d ago".
+     */
+    fun relativeAge(postedAt: Long?, now: Long = System.currentTimeMillis()): String? {
+        if (postedAt == null || postedAt <= 0L) return null
+        val minutes = (now - postedAt) / 60_000L
+        return when {
+            minutes < 1 -> "just now"
+            minutes < 60 -> "${minutes}m ago"
+            minutes < 60 * 24 -> "${minutes / 60}h ago"
+            minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d ago"
+            else -> "${minutes / (60 * 24 * 7)}w ago"
+        }
+    }
+
     /** Lower-case, whitespace collapsed - used for cross-site dedupe. */
     fun normalizeForDedupe(text: String?): String =
         text?.lowercase()?.replace(Regex("[^a-z0-9]+"), " ")?.trim().orEmpty()

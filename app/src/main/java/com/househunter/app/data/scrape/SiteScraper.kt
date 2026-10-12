@@ -229,6 +229,17 @@ open class SiteScraper @Inject constructor(
             phone = Normalizer.sanitizePhone(json.firstString(map["phone"] ?: "phone")),
             detailUrl = detailUrl,
             description = json.firstString("description"),
+            // NoBroker publishes epoch-millis `creationDate`; Razorent ISO-8601
+            // `createdAt`. Neither site declares a `postedDate` key, so try the
+            // known names rather than leaving every listing undated.
+            postedAt = Normalizer.parsePostedAt(
+                json.firstString(map["postedDate"] ?: "postedDate")
+                    ?: json.firstString("creationDate")
+                    ?: json.firstString("createdAt")
+                    ?: json.firstString("active_date")
+                    ?: json.firstString("updateDate")
+                    ?: json.firstString(map["lastUpdated"] ?: "lastUpdated"),
+            ),
             ownerName = advertiser,
             ownerType = when {
                 !ownerName.isNullOrBlank() -> "Owner"
@@ -379,6 +390,12 @@ open class SiteScraper @Inject constructor(
             phone = Normalizer.sanitizePhone(selectors.phone?.let { text(card, it) }),
             detailUrl = detailUrl,
             description = jsonLd.description,
+            // Card portals print free text ("2 days ago"), which `parsePostedAt`
+            // deliberately does not guess at; a configured selector or a JSON-LD
+            // `datePosted` still yields a real timestamp.
+            postedAt = Normalizer.parsePostedAt(
+                selectors.postedDate?.let { text(card, it) } ?: jsonLd.datePosted,
+            ),
             ownerName = jsonLd.owner ?: ownerTag?.second,
             ownerType = ownerTag?.first ?: jsonLd.owner?.let { "Owner" },
         )
