@@ -92,10 +92,50 @@ jobs:
               raise SystemExit("::error::no unit tests were executed")
           PY
 
+      # The secrets-gradle-plugin injects `${MAPS_API_KEY}` into the manifest by
+      # reading `.env`, which is gitignored and therefore absent on the runner.
+      # Without this the plugin silently falls back to the `your-google-maps-api-key`
+      # placeholder in `.env.example`: `BuildConfig` looked correct, but the manifest
+      # the Maps SDK actually reads was the dummy, so the map failed at runtime.
+      - name: Materialise .env for the secrets plugin
+        env:
+          MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MAPS_API_KEY:-}" ]; then
+            echo "::warning::MAPS_API_KEY secret is empty - maps will be disabled in this build"
+          fi
+          printf 'MAPS_API_KEY=%s\n' "$MAPS_API_KEY" > .env
+          echo "wrote .env (value not echoed)"
+
       - name: Assemble release APK (unsigned)
         run: ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           MAPS_API_KEY: ${{ secrets.MAPS_API_KEY }}
+
+      # Proves the key reached the merged manifest rather than the placeholder.
+      # A silent regression here is invisible: the app builds, then the map is blank.
+      - name: Verify the Maps key reached the merged manifest
+        run: |
+          set -euo pipefail
+          # The intermediates path is AGP-version dependent, so locate the manifest
+          # instead of hardcoding it - a wrong guess must not read as "missing key".
+          MERGED=$(find app/build/intermediates -path '*merged_manifest*' \
+            -name AndroidManifest.xml 2>/dev/null | head -1 || true)
+          if [ -z "$MERGED" ]; then
+            echo "::warning::no merged manifest found; skipping the Maps key check"
+            exit 0
+          fi
+          echo "checking $MERGED"
+          if grep -q 'your-google-maps-api-key' "$MERGED"; then
+            echo "::error::merged manifest still contains the placeholder Maps key"
+            exit 1
+          fi
+          if ! grep -q 'com.google.android.geo.API_KEY' "$MERGED"; then
+            echo "::error::Maps API_KEY meta-data missing from the merged manifest"
+            exit 1
+          fi
+          echo "Maps key present in merged manifest"
 
       - name: Align & sign APK
         run: |
