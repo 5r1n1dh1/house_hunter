@@ -95,8 +95,8 @@ class PrefsRepository @Inject constructor(
      * re-fetched from its source and the entry self-heals to a placeholder if the
      * source has since dropped it.
      */
-    val favourites: Flow<Set<String>> = preferences.map { raw ->
-        decodeFavourites(raw)
+    val favourites: Flow<Set<String>> = preferences.map { p ->
+        decodeFavourites(p[Keys.FAVOURITES])
     }
 
     val customSites: Flow<List<SiteConfig>> = preferences.map { decodeSites(it[Keys.CUSTOM_SITES]) }
