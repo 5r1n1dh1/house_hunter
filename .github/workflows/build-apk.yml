@@ -118,12 +118,13 @@ jobs:
       - name: Verify the Maps key reached the merged manifest
         run: |
           set -euo pipefail
-          # The intermediates path is AGP-version dependent, so locate the manifest
-          # instead of hardcoding it - a wrong guess must not read as "missing key".
-          MERGED=$(find app/build/intermediates -path '*merged_manifest*' \
+          # Scope to release: the earlier `lintDebug` step leaves a debug merged
+          # manifest behind, and that one legitimately holds the placeholder
+          # because `.env` is only written after the tests run.
+          MERGED=$(find app/build/intermediates -path '*release*merged_manifest*' \
             -name AndroidManifest.xml 2>/dev/null | head -1 || true)
           if [ -z "$MERGED" ]; then
-            echo "::warning::no merged manifest found; skipping the Maps key check"
+            echo "::warning::no release merged manifest found; skipping the Maps key check"
             exit 0
           fi
           echo "checking $MERGED"
